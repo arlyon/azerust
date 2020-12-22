@@ -1,0 +1,14 @@
+[package]
+name = "assert-size-attribute"
+version = "0.1.0"
+authors = ["Alexander Lyon <arlyon@me.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quote = "1.0.7"
+syn = "1.0.54"
