@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use derive_more::Display;
 use thiserror::Error;
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, PartialEq)]
 pub struct AccountId(pub u32);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Account {
     pub id: AccountId,
     pub username: String,

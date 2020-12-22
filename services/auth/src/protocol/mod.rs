@@ -1,29 +1,22 @@
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 use derive_more::Display;
-use game::accounts::{Account, AccountService, BanStatus};
-use num_bigint::BigUint;
-use rand::prelude::*;
-use srp::server::{SrpServer, UserRecord};
 use thiserror::Error;
-use tracing::{event, Level};
 
-use self::packets::{
-    AuthCommand, AuthLogonProof, AuthReconnectProof, ConnectChallenge, ConnectRequest, LogonProof,
-};
+use self::packets::{AuthCommand, ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
 
 pub mod packets;
 
 #[repr(u8)]
 #[derive(Debug)]
 pub enum Message {
-    AuthLogonChallenge(ConnectRequest) = 0x00,
-    AuthLogonProof(AuthLogonProof) = 0x01,
+    ConnectRequest(ConnectRequest) = 0x00,
+    AuthLogonProof(ConnectProof) = 0x01,
 
     AuthReconnectChallenge(ConnectRequest) = 0x02,
-    AuthReconnectProof(AuthReconnectProof) = 0x03,
+    AuthReconnectProof(ReconnectProof) = 0x03,
 
-    RealmList = 0x10,
+    RealmList(RealmListRequest) = 0x10,
 }
 
 impl TryFrom<&[u8]> for Message {
@@ -36,7 +29,7 @@ impl TryFrom<&[u8]> for Message {
             .map_err(|_| MessageParseError::InvalidCommand(command))
             .and_then(|c| match c {
                 AuthCommand::ConnectRequest => bincode::deserialize(data)
-                    .map(|d| Message::AuthLogonChallenge(d))
+                    .map(|d| Message::ConnectRequest(d))
                     .map_err(Into::into),
                 AuthCommand::AuthLogonProof => bincode::deserialize(data)
                     .map(|d| Message::AuthLogonProof(d))
@@ -47,7 +40,7 @@ impl TryFrom<&[u8]> for Message {
                 AuthCommand::AuthReconnectProof => bincode::deserialize(data)
                     .map(|d| Message::AuthReconnectProof(d))
                     .map_err(Into::into),
-                AuthCommand::RealmList => Ok(Message::RealmList),
+                AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
                 _ => Err(MessageParseError::InvalidCommand(command)),
             })
     }

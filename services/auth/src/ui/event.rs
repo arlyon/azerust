@@ -84,12 +84,4 @@ impl Events {
     pub fn next(&self) -> Result<Event<Key>, mpsc::RecvError> {
         self.rx.recv()
     }
-
-    pub fn disable_exit_key(&mut self) {
-        self.ignore_exit_key.store(true, Ordering::Relaxed);
-    }
-
-    pub fn enable_exit_key(&mut self) {
-        self.ignore_exit_key.store(false, Ordering::Relaxed);
-    }
 }

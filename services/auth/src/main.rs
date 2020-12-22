@@ -16,7 +16,6 @@ mod authserver;
 mod conf;
 mod opt;
 mod protocol;
-mod state_machine;
 mod ui;
 
 fn main() -> Result<()> {
@@ -53,12 +52,15 @@ fn start_server<'a, U: 'static + UI + Send>(opts: Opt, ui: Option<U>) -> Result<
 
     let e1 = thread::spawn(move || match ui {
         Some(ui) => task::block_on(async {
-            ui.start(&command_sender, &reply_receiver).await;
-            command_sender.send(authserver::Command::ShutDown).await;
+            ui.start(&command_sender, &reply_receiver).await.unwrap();
+            command_sender
+                .send(authserver::Command::ShutDown)
+                .await
+                .unwrap();
         }),
         None => task::block_on(async {
             loop {
-                reply_receiver.recv().await;
+                reply_receiver.recv().await.unwrap();
             }
         }),
     });
@@ -66,7 +68,7 @@ fn start_server<'a, U: 'static + UI + Send>(opts: Opt, ui: Option<U>) -> Result<
     // let e2 = thread::spawn(move || {
     task::block_on(
         AuthServer(command_receiver, reply_sender).start(config.bind_address, config.port),
-    );
+    )?;
     // });
 
     e1.join().unwrap();

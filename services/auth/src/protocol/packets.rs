@@ -1,14 +1,20 @@
-use std::{convert::TryInto, net::Ipv4Addr};
+use std::convert::TryInto;
 
 use assert_size_attribute::assert_eq_size;
+use derivative::Derivative;
 use derive_more::DebugCustom;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::TryFromPrimitive;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use srp::{server::SrpServer, types::SrpGroup};
 use tracing::{event, Level};
 
+const VERSION_CHALLENGE: [u8; 16] = [
+    0xBA, 0xA3, 0x1E, 0x99, 0xA0, 0x0B, 0x21, 0x57, 0xFC, 0x37, 0x3F, 0xB3, 0x69, 0xCD, 0xD2, 0xF1,
+];
+
+/// All the known OpCodes
 #[repr(u8)]
 #[derive(TryFromPrimitive, Debug, Serialize)]
 pub enum AuthCommand {
@@ -24,32 +30,13 @@ pub enum AuthCommand {
     TransferCancel = 0x34,
 }
 
+/// All the known ReturnCodes
 #[repr(u8)]
-#[derive(TryFromPrimitive)]
-pub enum LoginResult {
-    Ok = 0x00,
+#[derive(Serialize, Debug)]
+pub enum ReturnCodes {
+    Success = 0x00,
     Failed = 0x01,
     Failed2 = 0x02,
-    Banned = 0x03,
-    UnknownAccount = 0x04,
-    UnknownAccount3 = 0x05,
-    Alreadyonline = 0x06,
-    Notime = 0x07,
-    Dbbusy = 0x08,
-    Badversion = 0x09,
-    DownloadFile = 0x0A,
-    Failed3 = 0x0B,
-    Suspended = 0x0C,
-    Failed4 = 0x0D,
-    Connected = 0x0E,
-    Parentalcontrol = 0x0F,
-    LockedEnforced = 0x10,
-}
-
-#[repr(C, u8)]
-#[derive(Serialize, Debug)]
-pub enum ConnectChallenge {
-    Success(LogonProof) = 0x00,
     Banned = 0x03,
     UnknownAccount = 0x04,
     IncorrectPassword = 0x05,
@@ -77,38 +64,55 @@ pub enum ConnectChallenge {
     Disconnected = 0xFF,
 }
 
-#[repr(u8)]
-pub enum AuthLogonProofResponse {
-    UnknownAccount = 0x04,
-    VersionInvalid = 0x09,
-    Success(LogonProofResponse) = 0x0,
+/// ConnectRequest is sent to the server by a client
+/// looking to freshly connect to the server.
+#[repr(packed(1), C)]
+#[assert_eq_size([u8; 1 + 2 + 4 + 1 + 1 + 1 + 2 + 4 + 4 + 4 + 4 + 4 + 1])]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct ConnectRequest {
+    pub error: u8,
+    pub size: u16,
+    pub game_name: [u8; 4],
+    pub version_major: u8,
+    pub version_minor: u8,
+    pub version_patch: u8,
+    pub build: u16,
+    pub platform: [u8; 4],
+    pub os: [u8; 4],
+    pub country: [u8; 4],
+    pub timezone_bias: u32,
+    pub ipv4: [u8; 4],
+
+    /// The length of the SRP identifier,
+    /// which is appended on the back of the packet.
+    pub identifier_length: u8,
 }
 
-const VERSION_CHALLENGE: [u8; 16] = [
-    0xBA, 0xA3, 0x1E, 0x99, 0xA0, 0x0B, 0x21, 0x57, 0xFC, 0x37, 0x3F, 0xB3, 0x69, 0xCD, 0xD2, 0xF1,
-];
-
-#[derive(DebugCustom)]
+/// ConnectChallenge is sent to the client after
+/// a ConnectRequest with a challenge for it to solve.
+#[derive(DebugCustom, Derivative, Clone)]
+#[derivative(PartialEq)]
 #[debug(fmt = "{:?} {:?} {}", salt, group, security_flags)]
-pub struct LogonProof {
+pub struct ConnectChallenge {
     pub salt: [u8; 32],
+    #[derivative(PartialEq = "ignore")]
     pub srp: SrpServer<Sha1>,
     pub group: SrpGroup,
     pub security_flags: u8,
 }
 
-impl Serialize for LogonProof {
+impl Serialize for ConnectChallenge {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         let g = self.group.g.to_bytes_le();
-        let N = self.group.n.to_bytes_le();
+        let n = self.group.n.to_bytes_le();
         let s = self.salt;
         let b_pub: [u8; 32] = self.srp.get_b_pub().try_into().expect("wrong B length");
 
         event!(Level::TRACE, "g: {:?}", g);
-        event!(Level::TRACE, "N: {:?}", N);
+        event!(Level::TRACE, "N: {:?}", n);
         event!(Level::TRACE, "s: {:?}", s);
         event!(Level::TRACE, "B: {:?}", b_pub);
 
@@ -119,7 +123,7 @@ impl Serialize for LogonProof {
         let mut state = serializer.serialize_struct("packet", len)?;
         state.serialize_field("B", &b_pub)?;
         state.serialize_field("g", &g)?;
-        state.serialize_field("N", &N)?;
+        state.serialize_field("N", &n)?;
         state.serialize_field("s", &s)?;
         state.serialize_field("challenge", &VERSION_CHALLENGE)?;
         state.serialize_field("flags", &self.security_flags)?;
@@ -149,61 +153,76 @@ impl Serialize for LogonProof {
     }
 }
 
-#[repr(packed(1))]
-#[assert_eq_size([u8; 16 + 20 + 20 + 1])]
-#[derive(Serialize, Deserialize, Default, Debug)]
-pub struct AuthReconnectProof {
-    pub R1: [u8; 16],
-    pub R2: [u8; 20],
-    pub R3: [u8; 20],
-    pub key_count: u8,
-}
-
-/// The auth logon challenge is a struct followed by a slice of I_len bytes.
-#[repr(packed(1), C)]
-#[assert_eq_size([u8; 1 + 2 + 4 + 1 + 1 + 1 + 2 + 4 + 4 + 4 + 4 + 4 + 1])]
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ConnectRequest {
-    pub error: u8,
-    pub size: u16,
-    pub game_name: [u8; 4],
-    pub version_major: u8,
-    pub version_minor: u8,
-    pub version_patch: u8,
-    pub build: u16,
-    pub platform: [u8; 4],
-    pub os: [u8; 4],
-    pub country: [u8; 4],
-    pub timezone_bias: u32,
-    pub ip: [u8; 4],
-    pub I_len: u8,
-}
-
-impl ConnectRequest {
-    pub fn ip(&self) -> Ipv4Addr {
-        Ipv4Addr::from(self.ip)
-    }
-}
-
+/// ConnectProof is sent to the server after a
+/// client receives a ConnectChallenge.
 #[repr(packed(1))]
 #[assert_eq_size([u8; 32 + 20 + 20 + 1 + 1])]
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AuthLogonProof {
-    pub srp_A: [u8; 32],
-    pub srp_client_M: [u8; 20],
+pub struct ConnectProof {
+    pub user_public_key: [u8; 32],
+    pub user_proof: [u8; 20],
     pub crc_hash: [u8; 20],
     pub number_of_keys: u8,
     pub security_flags: u8,
 }
 
-pub struct LogonProofResponse {
+/// ConnectProofResponse is sent to the client
+/// after verifying a ConnectProof request.
+#[derive(PartialEq)]
+pub struct ConnectProofResponse {
     pub error: u8,
-    pub M2: [u8; 32],
+    pub server_proof: [u8; 32],
     pub account_flags: u32,
     pub survey_id: u32,
     pub login_flags: u16,
 }
 
+/// ReconnectProof is sent to the server by a client
+/// in response to a ReconnectChallenge.
+#[repr(packed(1))]
+#[assert_eq_size([u8; 16 + 20 + 20 + 1])]
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct ReconnectProof {
+    pub r_1: [u8; 16],
+    pub r_2: [u8; 20],
+    pub r_3: [u8; 20],
+    pub key_count: u8,
+}
+/// RealmlistRequest is sent by an authenticated
+/// account after the ReconnectProof is validated.
+#[repr(packed(1))]
+#[assert_eq_size([u8; 4])]
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct RealmListRequest {
+    pub data: [u8; 4],
+}
+
+/// RealmListResponse is returned from a RealmlistRequest
+#[repr(packed(1))]
+#[assert_eq_size([u8; 4])]
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct RealmListResponse {
+    pub packet_size: u16,
+    pub data: [u8; 4],
+
+    /// The length of the Realm list, which
+    /// is appended on the back of the packet.
+    pub realm_count: u16,
+}
+
+/// A single realm in the realmlist. In the
+pub struct Realm {
+    realm_type: u8,
+    status: u8,
+    color: u8,
+    name: String,
+    socket: String,
+    pop_level: u32,
+    character_count: u8,
+    timezone: u8,
+}
+
+/// Reply Packet wraps a message with its opcode.
 #[derive(Serialize)]
 pub struct ReplyPacket {
     command: AuthCommand,

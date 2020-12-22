@@ -27,7 +27,7 @@ impl UI for Repl {
         }
 
         let mut rl = Editor::<()>::new();
-        rl.load_history(".auth.history");
+        let _ = rl.load_history(".auth.history");
 
         loop {
             let readline = rl.readline(">> ");
@@ -78,7 +78,7 @@ impl UI for Repl {
 
         s.send(authserver::Command::ShutDown).await.unwrap();
         print_output(&r).await;
-        rl.save_history(".auth.history");
+        let _ = rl.save_history(".auth.history");
 
         Ok(())
     }

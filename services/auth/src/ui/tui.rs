@@ -136,12 +136,10 @@ impl UI for Tui {
             // Handle input
             if let Event::Input(input) = events.next()? {
                 if let Key::Char('q') = input {
-                    async_std::task::block_on(async { s.send(Command::ShutDown).await });
+                    let _ = async_std::task::block_on(async { s.send(Command::ShutDown).await });
                 }
             }
         }
-
-        Ok(())
     }
 }
 
