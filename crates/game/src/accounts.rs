@@ -1,20 +1,23 @@
 use async_trait::async_trait;
 use derive_more::Display;
+use sqlx::Type;
+
 use thiserror::Error;
 
-#[derive(Debug, Display, PartialEq)]
+#[derive(Debug, Display, PartialEq, Type)]
+#[sqlx(transparent)]
 pub struct AccountId(pub u32);
 
 #[derive(Debug, PartialEq)]
 pub struct Account {
     pub id: AccountId,
     pub username: String,
-    pub salt: Vec<u8>,
-    pub verifier: Vec<u8>,
+    pub salt: [u8; 32],
+    pub verifier: [u8; 32],
     pub ban_status: Option<BanStatus>,
 }
-
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Type)]
+#[repr(u8)]
 pub enum BanStatus {
     Temporary,
     Permanent,
@@ -24,7 +27,7 @@ pub enum BanStatus {
 pub enum AccountOpError {
     UsernameTooLong,
     PasswordTooLong,
-    PersistError,
+    PersistError(String),
     InvalidAccount(AccountId),
 }
 

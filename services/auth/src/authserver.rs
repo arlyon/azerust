@@ -203,7 +203,7 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                             realm_type: 0x01,
                             locked: false,
                             flags: 0x0,
-                            name: "Hi Ben".into(),
+                            name: "Hi Mum".into(),
                             socket: "51.178.64.97:8095".into(),
                             pop_level: 0f32,
                             character_count: 0,

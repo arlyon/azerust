@@ -1,13 +1,9 @@
 use async_trait::async_trait;
 use game::accounts::{Account, AccountId, AccountOpError};
-use lazy_static::lazy_static;
-use rand::{prelude::*, thread_rng};
-use srp::client::srp_private_key;
+use tracing::instrument;
+use wow_srp::WowSRPServer;
 
-lazy_static! {
-    static ref SALT: [u8; 32] = thread_rng().gen();
-}
-
+#[derive(Debug)]
 pub struct AccountService {
     pool: sqlx::MySqlPool,
 }
@@ -22,6 +18,7 @@ impl AccountService {
 
 #[async_trait]
 impl game::accounts::AccountService for AccountService {
+    #[instrument(skip(self))]
     async fn create_account(
         &self,
         username: &str,
@@ -38,16 +35,14 @@ impl game::accounts::AccountService for AccountService {
         let username = username.to_ascii_uppercase();
         let password = password.to_ascii_uppercase();
 
-        let salt = *SALT;
-        let verifier =
-            srp_private_key::<sha1::Sha1>(username.as_bytes(), password.as_bytes(), &*SALT);
+        let (verifier, salt) = WowSRPServer::register(&username, &password);
 
         let done = sqlx::query!(
             "INSERT INTO account(username, salt, verifier, reg_mail, email, joindate) VALUES(?, ?, ?, ?, ?, NOW())",
-            &username, &salt[..], verifier.as_slice(), &email, &email
+            &username, &salt.0[..], &verifier.0[..], &email, &email
         )
         .execute(&self.pool)
-        .await.map_err(|_| AccountOpError::PersistError)?;
+        .await.map_err(|e| AccountOpError::PersistError(e.to_string()))?;
 
         let id = AccountId(done.last_insert_id() as u32);
 
@@ -55,17 +50,18 @@ impl game::accounts::AccountService for AccountService {
             "INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL",
         )
         .execute(&self.pool)
-        .await.map_err(|_| AccountOpError::PersistError)?;
+        .await.map_err(|e| AccountOpError::PersistError(e.to_string()))?;
 
         Ok(id)
     }
 
+    #[instrument(skip(self))]
     async fn delete_account(&self, id: AccountId) -> Result<(), AccountOpError> {
         let exists = sqlx::query!("SELECT id FROM account WHERE id = ?", id.0,)
             .fetch_optional(&self.pool)
             .await
             .map(|r| r.is_some())
-            .map_err(|_| AccountOpError::PersistError)?;
+            .map_err(|e| AccountOpError::PersistError(e.to_string()))?;
 
         if !exists {
             return Err(AccountOpError::InvalidAccount(id));
@@ -73,7 +69,7 @@ impl game::accounts::AccountService for AccountService {
 
         let characters: Vec<u8> = vec![];
 
-        for character in characters {
+        for _character in characters {
             // delete
         }
 
@@ -90,16 +86,15 @@ impl game::accounts::AccountService for AccountService {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn get_account(&self, username: &str) -> Result<Account, AccountOpError> {
-        let verifier =
-            srp_private_key::<sha1::Sha1>(username.as_bytes(), "TEST".as_bytes(), &*SALT);
-
-        Ok(Account {
-            id: AccountId(1),
-            username: username.to_string(),
-            salt: (*SALT).into(),
-            verifier: verifier.as_slice().into(),
-            ban_status: None,
-        })
+        sqlx::query_as!(
+            Account,
+            r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", NULL as "ban_status: _" FROM account WHERE username = ?"#,
+            username
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AccountOpError::PersistError(e.to_string()))
     }
 }

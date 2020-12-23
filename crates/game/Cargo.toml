@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.42"
 derive_more = "0.99.11"
+sqlx = { version = "0.4.2", features = ["macros", "mysql"], path = "../../../sqlx" }
 thiserror = "1.0.22"
