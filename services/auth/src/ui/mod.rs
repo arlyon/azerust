@@ -11,11 +11,11 @@ mod tui;
 pub use self::repl::Repl;
 pub use self::tui::Tui;
 
-use crate::authserver::{Command, Response};
+use crate::authserver::{Command, ServerMessage};
 
 /// A generic trait for UIs showing the state of a server. It may send commands,
 /// and responds to Responses.
 #[async_trait]
 pub trait UI {
-    async fn start(&self, s: &Sender<Command>, r: &Receiver<Response>) -> Result<()>;
+    async fn start(&self, s: &Sender<Command>, r: &Receiver<ServerMessage>) -> Result<()>;
 }

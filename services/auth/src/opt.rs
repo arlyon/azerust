@@ -46,6 +46,6 @@ pub enum AccountCommand {
         /// The password to use
         password: String,
         /// The email address
-        email: Option<String>,
+        email: String,
     },
 }

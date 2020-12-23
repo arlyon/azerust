@@ -4,31 +4,38 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use bincode::Options;
-use game::accounts::{Account, AccountService};
-use num_bigint::BigUint;
-use rand::Rng;
-use sha1::Sha1;
-use srp::server::{SrpServer, UserRecord};
 use std::{
     convert::{TryFrom, TryInto},
     net::Ipv4Addr,
 };
 
 use anyhow::{anyhow, Context, Result};
+use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
+use game::accounts::{Account, AccountService, BanStatus};
 use thiserror::Error;
-use tracing::{event, instrument, Level};
+use tracing::{debug, error, info, instrument};
+use wow_srp::{Salt, Verifier, WowSRPServer};
 
 use crate::protocol::{
     packets::{
         AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
-        RealmListResponse, ReconnectProof, ReplyPacket,
+        RealmListResponse, ReconnectProof, ReplyPacket, ReplyPacket2, ReturnCode,
     },
     Message, MessageParseError,
 };
 
+/// Messages to the UI from the server
+#[derive(PartialEq, Display)]
+pub enum ServerMessage {
+    Ready,
+    Update(String),
+    Complete(String),
+    Error(String),
+}
+
+/// Messages to the server
 #[derive(PartialEq, Eq)]
 pub enum Command {
     NewAccount {
@@ -37,24 +44,24 @@ pub enum Command {
         /// The password to use
         password: String,
         /// The email address
-        email: Option<String>,
+        email: String,
     },
     ShutDown,
 }
 
+/// Models the various valid states of the server.
 #[derive(Derivative)]
-#[derivative(PartialEq)]
+#[derivative(PartialEq, Debug)]
 pub enum RequestState {
     /// The initial state, nothing has been provided.
     Start,
 
     /// The server receives a connect request and generates a challenge.
     ConnectChallenge {
+        #[derivative(Debug = "ignore")]
         account: Account,
-
-        #[derivative(PartialEq = "ignore")]
-        server: SrpServer<Sha1>,
-
+        server: WowSRPServer,
+        #[derivative(Debug = "ignore")]
         response: ConnectChallenge,
     },
 
@@ -62,144 +69,188 @@ pub enum RequestState {
     // in either the authenticated or rejected states.
     /// The server has accepted the request.
     Authenticated {
+        #[derivative(Debug = "ignore")]
         response: ConnectProofResponse,
     },
 
     /// The server has rejected the request.
-    Rejected,
+    Rejected {
+        stage: AuthCommand,
+        status: ReturnCode,
+    },
 
     Done,
 }
 
-#[derive(PartialEq, Display)]
-pub enum Response {
-    Ready,
-    Update(String),
-    Complete(String),
-    Error(String),
+#[derive(Debug)]
+pub struct AuthServer<T: AccountService + std::fmt::Debug> {
+    pub command_receiver: Receiver<Command>,
+    pub reply_sender: Sender<ServerMessage>,
+    pub accounts: T,
 }
 
-#[derive(Debug)]
-pub struct AuthServer(pub Receiver<Command>, pub Sender<Response>);
-
-impl AuthServer {
+impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
     #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
         let addr = format!("{}:{}", host, port);
         let listener = TcpListener::bind(&addr).await?;
 
-        event!(Level::DEBUG, "listening on {}", &addr);
-        self.1
-            .send(Response::Ready)
+        info!("listening on {}", &addr);
+        self.reply_sender
+            .send(ServerMessage::Ready)
             .await
             .context("Couldn't send Authserver ready message")?;
 
         let mut connections = listener.incoming().filter_map(|s| s.ok());
         while let Some(mut stream) = connections.next().await {
-            let _ = self.connect_loop(&mut stream).await;
+            match self.connect_loop(&mut stream).await {
+                Ok(_) => {}
+                Err(e) => error!("error handling request: {}", e),
+            }
         }
 
         Ok(())
     }
 
-    /// A connection may contain multiple packets
     #[instrument(skip(self, stream))]
     async fn connect_loop(&self, stream: &mut TcpStream) -> Result<()> {
         let mut reader = stream.clone();
         let mut state = RequestState::Start;
-        let accounts = mysql::accounts::AccountService::new("mysql://localhost:49156/auth")
-            .await
-            .unwrap();
 
         loop {
+            debug!("handling state {:?}", state);
             state = match state {
-                RequestState::Start => {
-                    let message = read_packet(&mut reader).await?;
-                    match message {
-                        Message::ConnectRequest(c) => {
-                            let mut buffer = [0u8; 256];
-                            let username = {
-                                let username = &mut buffer[..c.identifier_length as usize];
-                                reader.read(username).await?;
-                                std::str::from_utf8(username).expect("valid")
-                            };
+                RequestState::Start => match read_packet(&mut reader).await {
+                    Ok(Message::ConnectRequest(c)) => {
+                        let mut buffer = [0u8; 256];
+                        let username = {
+                            let username = &mut buffer[..c.identifier_length as usize];
+                            reader.read(username).await?;
+                            std::str::from_utf8(username).expect("valid")
+                        };
 
-                            let state = handle_logon_request(c, username, &accounts).await?;
-                            if let RequestState::ConnectChallenge { response, .. } = &state {
-                                let packet = ReplyPacket::new(response.clone());
-                                let len = bincode::DefaultOptions::new()
-                                    .with_varint_encoding()
-                                    .serialized_size(&packet)
-                                    .unwrap();
-                                bincode::DefaultOptions::new()
-                                    .with_varint_encoding()
-                                    .serialize_into(&mut buffer[..], &packet)
-                                    .unwrap();
-                                stream.write(&buffer[..len as usize]).await?;
-                                stream.flush().await?;
+                        let state = match handle_logon_request(c, username, &self.accounts).await {
+                            Ok(s) => s,
+                            Err(status) => {
+                                state = RequestState::Rejected {
+                                    stage: AuthCommand::ConnectRequest,
+                                    status,
+                                };
+                                continue;
                             }
+                        };
 
-                            state
+                        if let RequestState::ConnectChallenge { response, .. } = &state {
+                            let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
+                            let len = bincode::DefaultOptions::new()
+                                .with_varint_encoding()
+                                .serialized_size(&packet)
+                                .unwrap() as usize;
+                            bincode::DefaultOptions::new()
+                                .with_varint_encoding()
+                                .serialize_into(&mut buffer[..len], &packet)
+                                .unwrap();
+
+                            debug!("packet: {:02X?}", &buffer[..len as usize]);
+
+                            stream.write(&buffer[..len as usize]).await?;
+                            stream.flush().await?;
                         }
-                        _ => return Err(anyhow!("invalid state")),
+
+                        state
                     }
-                }
+                    Err(e) => RequestState::Rejected {
+                        stage: AuthCommand::ConnectRequest,
+                        status: ReturnCode::Failed,
+                    },
+                    _ => return Err(anyhow!("invalid state")),
+                },
                 RequestState::ConnectChallenge {
                     account, server, ..
-                } => {
-                    let message = read_packet(&mut reader).await?;
-                    match message {
-                        Message::AuthLogonProof(p) => {
-                            let state = handle_logon_proof(p, server, account).await?;
-                            if let RequestState::Authenticated { response } = &state {
-                                let packet = ReplyPacket::new(response.clone());
-                                let packet = bincode::DefaultOptions::new()
-                                    .with_varint_encoding()
-                                    .serialize(&packet)
-                                    .unwrap();
-                                stream.write(&packet).await?;
-                                stream.flush().await?;
+                } => match read_packet(&mut reader).await {
+                    Ok(Message::AuthLogonProof(p)) => {
+                        let state = match handle_logon_proof(p, server, &account).await {
+                            Ok(s) => s,
+                            Err(status) => {
+                                state = RequestState::Rejected {
+                                    stage: AuthCommand::AuthLogonProof,
+                                    status,
+                                };
+                                continue;
                             }
-
-                            state
-                        }
-                        _ => return Err(anyhow!("invalid state")),
-                    }
-                }
-                RequestState::Authenticated { response } => {
-                    let message = read_packet(&mut reader).await?;
-                    match message {
-                        Message::RealmList(_r) => {
-                            let resp = RealmListResponse {
-                                packet_size: 200,
-                                data: [0; 4],
-                                realm_count: 1,
+                        };
+                        if let RequestState::Authenticated { response } = &state {
+                            let packet = ReplyPacket2 {
+                                command: AuthCommand::AuthLogonProof,
+                                message: *response,
                             };
+                            let packet = bincode::serialize(&packet).unwrap();
 
-                            let realms = [Realm {
-                                realm_type: 0x1,
-                                status: 0x0,
-                                color: 0x0,
-                                name: "Blackrock".to_string(),
-                                socket: "localhost:8080".to_string(),
-                                pop_level: 0,
-                                character_count: 0,
-                                timezone: 8,
-                            }];
+                            debug!("sending packet: {:?}", &packet);
 
-                            let packet = bincode::DefaultOptions::new()
-                                .with_varint_encoding()
-                                .serialize(&resp)
-                                .unwrap();
                             stream.write(&packet).await?;
                             stream.flush().await?;
-
-                            RequestState::Done
                         }
-                        _ => return Err(anyhow!("invalid state")),
+
+                        state
                     }
+                    Err(e) => return Err(e.into()),
+                    _ => return Err(anyhow!("invalid state")),
+                },
+                RequestState::Authenticated { .. } => match read_packet(&mut reader).await {
+                    Ok(Message::RealmList(_r)) => {
+                        let realms = vec![Realm {
+                            realm_type: 0x01,
+                            locked: false,
+                            flags: 0x0,
+                            name: "Hi Ben".into(),
+                            socket: "51.178.64.97:8095".into(),
+                            pop_level: 0f32,
+                            character_count: 0,
+                            timezone: 8,
+                            realm_id: 1,
+                        }];
+
+                        let resp = RealmListResponse::from_realms(&realms);
+
+                        let mut packet = bincode::DefaultOptions::new()
+                            .with_fixint_encoding()
+                            .serialize(&(AuthCommand::RealmList, resp))
+                            .unwrap();
+
+                        for realm in realms {
+                            debug!("sending realm {:?}", realm);
+                            packet.append(
+                                &mut bincode::DefaultOptions::new()
+                                    .with_fixint_encoding()
+                                    .with_null_terminated_str_encoding()
+                                    .serialize(&realm)
+                                    .unwrap(),
+                            );
+                        }
+
+                        packet.push(0x10);
+                        packet.push(0x0);
+
+                        stream.write(&packet).await?;
+                        stream.flush().await?;
+
+                        RequestState::Done
+                    }
+                    Err(e) => return Err(e.into()),
+                    _ => return Err(anyhow!("invalid state")),
+                },
+                RequestState::Rejected { stage, status } => {
+                    let mut buffer = [0u8; 2];
+                    bincode::DefaultOptions::new()
+                        .with_varint_encoding()
+                        .serialize_into(&mut buffer[..], &(stage, status))
+                        .unwrap();
+                    debug!("sending {:?}", buffer);
+                    stream.write(&buffer).await?;
+                    stream.flush().await?;
+                    RequestState::Done
                 }
-                RequestState::Rejected => break,
                 RequestState::Done => break,
             }
         }
@@ -214,11 +265,13 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
 ) -> Result<Message, PacketHandleError> {
     let mut buffer = [0u8; 128];
 
-    event!(Level::DEBUG, "getting command");
+    debug!("getting command");
     packet.read(&mut buffer[..1]).await.unwrap();
 
+    debug!("read {:02X?}", &buffer[..1]);
+
     let command = AuthCommand::try_from(buffer[0]).expect("this should be valid");
-    event!(Level::DEBUG, "received command {:?}", command);
+    debug!("received command {:?}", command);
 
     let command_len = match command {
         AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
@@ -229,8 +282,16 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
         _ => todo!(),
     };
 
-    assert!(packet.read(&mut buffer[..command_len]).await.unwrap() == command_len);
-    event!(Level::DEBUG, "read buffer {:?}", &buffer[..command_len]);
+    let read_length = packet.read(&mut buffer[..command_len]).await.unwrap();
+    debug!(
+        "read {:?} bytes into buffer {:02X?}",
+        read_length,
+        &buffer[..read_length]
+    );
+
+    if read_length != command_len {
+        return Err(PacketHandleError::MessageLength(read_length, command_len));
+    }
 
     match command {
         AuthCommand::ConnectRequest => bincode::deserialize(&buffer[..])
@@ -254,12 +315,11 @@ async fn handle_logon_request(
     request: ConnectRequest,
     username: &str,
     accounts: &dyn AccountService,
-) -> Result<RequestState> {
-    event!(Level::DEBUG, "auth challenge for {}", username);
+) -> Result<RequestState, ReturnCode> {
+    debug!("auth challenge for {}", username);
 
     if request.build != 12340 {
-        // return Err(ConnectChallenge::VersionInvalid);
-        todo!()
+        return Err(ReturnCode::VersionInvalid);
     };
 
     let account = accounts.get_account(username).await.ok();
@@ -269,58 +329,30 @@ async fn handle_logon_request(
             username,
             ..
         }) => {
-            event!(Level::DEBUG, "banned user {} attempted to log in", username);
-            todo!()
-            // return match status {
-            //     BanStatus::Temporary => Err(ConnectChallenge::Suspended),
-            //     BanStatus::Permanent => Err(ConnectChallenge::Banned),
-            // };
+            debug!("banned user {} attempted to log in", username);
+            return match status {
+                BanStatus::Temporary => Err(ReturnCode::Suspended),
+                BanStatus::Permanent => Err(ReturnCode::Banned),
+            };
         }
         Some(x) => x,
         None => {
-            todo!()
-            // return Err(ConnectChallenge::UnknownAccount);
+            return Err(ReturnCode::UnknownAccount);
         }
     };
 
-    event!(Level::DEBUG, "got user {:?}", account);
+    debug!("got user {:?}", account);
 
-    let group = srp::types::SrpGroup {
-        n: BigUint::from_bytes_be(&[
-            0x89, 0x4B, 0x64, 0x5E, 0x89, 0xE1, 0x53, 0x5B, 0xBD, 0xAD, 0x5B, 0x8B, 0x29, 0x06,
-            0x50, 0x53, 0x08, 0x01, 0xB1, 0x8E, 0xBF, 0xBF, 0x5E, 0x8F, 0xAB, 0x3C, 0x82, 0x87,
-            0x2A, 0x3E, 0x9B, 0xB7,
-        ]),
-        g: BigUint::from_bytes_be(&[7]),
-    };
-    let user_record = UserRecord {
-        salt: &account.salt,
-        username: account.username.as_bytes(),
-        verifier: &account.verifier,
-    };
-
-    let mut b = [0u8; 64];
-    let fst: [u8; 32] = rand::thread_rng().gen();
-    let snd: [u8; 32] = rand::thread_rng().gen();
-    b[..32].copy_from_slice(&fst);
-    b[32..].copy_from_slice(&snd);
-
-    // generate dummy a value, so we can get the B
-    let a_dummy: [u8; 32] = rand::thread_rng().gen();
-
-    let srp_1 = SrpServer::new(&user_record, &a_dummy, &b, &group).expect("works");
-    let srp_2 = SrpServer::new(&user_record, &a_dummy, &b, &group).expect("works");
-
-    let response = ConnectChallenge {
-        srp: srp_1,
-        group: group,
-        salt: user_record.salt.try_into().unwrap(),
-        security_flags: 0,
-    };
+    let salt = Salt(account.salt.clone().try_into().expect("32 bytes"));
+    let verifier = Verifier(account.verifier.clone().try_into().expect("32 bytes"));
+    let server = WowSRPServer::new(&account.username, salt, verifier);
 
     Ok(RequestState::ConnectChallenge {
-        response,
-        server: srp_2,
+        response: ConnectChallenge {
+            server,
+            security_flags: 0,
+        },
+        server,
         account: account,
     })
 }
@@ -331,32 +363,33 @@ pub enum PacketHandleError {
     MessageParse(#[from] MessageParseError),
 
     #[error("received {0}, expected {1}")]
-    StatusError(u32, u32),
+    MessageLength(usize, usize),
 }
 
 async fn handle_logon_proof(
     p: ConnectProof,
-    server: SrpServer<Sha1>,
-    account: Account,
-) -> Result<RequestState> {
-    let server_proof = match server.verify(&p.user_proof) {
-        Ok(k) => k,
-        Err(e) => {
-            todo!("auth logon proof, unkown account")
+    server: WowSRPServer,
+    account: &Account,
+) -> Result<RequestState, ReturnCode> {
+    let session_key = match server.verify_challenge_response(&p.user_public_key, &p.user_proof) {
+        Some(k) => k,
+        None => {
+            debug!("failed password");
+            return Err(ReturnCode::IncorrectPassword);
         }
     };
 
+    let server_proof = server.get_server_proof(&p.user_public_key, &p.user_proof, &session_key);
+
+    println!("server proof: {:?}", server_proof);
+
     let response = ConnectProofResponse {
         error: 0,
-        server_proof: server_proof.as_slice().try_into().unwrap(),
-        account_flags: 0x0,
+        server_proof,
+        account_flags: 0x00800000,
         survey_id: 0,
         login_flags: 0,
     };
 
     Ok(RequestState::Authenticated { response })
-}
-
-pub fn verify_version() -> bool {
-    true
 }

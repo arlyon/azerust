@@ -1,7 +1,4 @@
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
-};
+use std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

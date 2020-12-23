@@ -2,7 +2,7 @@ use async_std::channel::Receiver;
 use async_std::channel::Sender;
 
 use anyhow::Result;
-use authserver::Response;
+use authserver::ServerMessage;
 use colored::*;
 use rustyline::{error::ReadlineError, Editor};
 use structopt::StructOpt;
@@ -17,11 +17,15 @@ pub struct Repl;
 
 #[async_trait]
 impl UI for Repl {
-    async fn start(&self, s: &Sender<authserver::Command>, r: &Receiver<Response>) -> Result<()> {
+    async fn start(
+        &self,
+        s: &Sender<authserver::Command>,
+        r: &Receiver<ServerMessage>,
+    ) -> Result<()> {
         loop {
             match r.recv().await {
-                Ok(Response::Update(u)) => println!("{}", u),
-                Ok(Response::Ready) => break,
+                Ok(ServerMessage::Update(u)) => println!("{}", u),
+                Ok(ServerMessage::Ready) => break,
                 _ => {}
             }
         }
@@ -86,17 +90,17 @@ impl UI for Repl {
 
 /// A simple read-eval-print loop.
 
-async fn print_output(r: &Receiver<Response>) {
+async fn print_output(r: &Receiver<ServerMessage>) {
     while let Ok(x) = r.recv().await {
         match &x {
-            Response::Update(x) => println!("{}", x),
-            Response::Complete(x) => println!("{}", x.green()),
-            Response::Error(x) => println!("{}", x.red()),
+            ServerMessage::Update(x) => println!("{}", x),
+            ServerMessage::Complete(x) => println!("{}", x.green()),
+            ServerMessage::Error(x) => println!("{}", x.red()),
             _ => {}
         }
 
         match &x {
-            Response::Complete(_) | Response::Error(_) => break,
+            ServerMessage::Complete(_) | ServerMessage::Error(_) => break,
             _ => {}
         }
     }

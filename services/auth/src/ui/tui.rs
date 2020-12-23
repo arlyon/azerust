@@ -1,32 +1,26 @@
 use async_std::channel::{Receiver, Sender};
-use async_trait::async_trait;
-use io::{BufWriter, Write};
-use std::{
-    io,
-    sync::{Arc, Mutex},
-};
-
-use tui_logger::TuiLoggerSmartWidget;
+use std::io;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use colored::*;
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
-    layout::{Constraint, Corner, Direction, Layout},
-    style::{Color, Modifier, Style},
+    layout::{Constraint, Direction, Layout},
+    style::{Modifier, Style},
     text::{Span, Spans, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
 };
 
-impl From<&Response> for ListItem<'_> {
-    fn from(r: &Response) -> Self {
+impl From<&ServerMessage> for ListItem<'_> {
+    fn from(r: &ServerMessage) -> Self {
         ListItem::new(match r {
-            Response::Ready => format!("Server ready."),
-            Response::Update(u) => format!("{}", u),
-            Response::Complete(c) => format!("{}", c.green()),
-            Response::Error(e) => format!("{}", e.red()),
+            ServerMessage::Ready => format!("Server ready."),
+            ServerMessage::Update(u) => format!("{}", u),
+            ServerMessage::Complete(c) => format!("{}", c.green()),
+            ServerMessage::Error(e) => format!("{}", e.red()),
         })
     }
 }
@@ -35,7 +29,7 @@ use super::{
     event::{Event, Events},
     UI,
 };
-use crate::authserver::{Command, Response};
+use crate::authserver::{Command, ServerMessage};
 
 struct Realm {
     name: String,
@@ -47,7 +41,7 @@ pub struct Tui;
 
 #[async_trait]
 impl UI for Tui {
-    async fn start(&self, s: &Sender<Command>, r: &Receiver<Response>) -> Result<()> {
+    async fn start(&self, s: &Sender<Command>, r: &Receiver<ServerMessage>) -> Result<()> {
         let stdout = io::stdout().into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
