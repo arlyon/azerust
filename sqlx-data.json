@@ -1,0 +1,125 @@
+{
+  "db": "MySQL",
+  "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf": {
+    "query": "INSERT INTO account(username, salt, verifier, reg_mail, email, joindate) VALUES(?, ?, ?, ?, ?, NOW())",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 5
+      },
+      "nullable": []
+    }
+  },
+  "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
+    "query": "SELECT id FROM account WHERE id = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    }
+  },
+  "d1d17d057c3f81550673cb3a6c27abcae76cda6572e5640219ca560f820ee351": {
+    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", NULL as \"ban_status: _\" FROM account WHERE username = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "username",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "salt: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "verifier: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "ban_status: _",
+          "type_info": {
+            "type": "Null",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 0
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    }
+  },
+  "f582e1d6c42043942af9191c90642a78ec62c6f81d294169014268cd4311717f": {
+    "query": "INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": []
+    }
+  }
+}
