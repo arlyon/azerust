@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, path::PathBuf};
+use async_std::{net::Ipv4Addr, path::PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -12,12 +12,12 @@ pub struct AuthServerConfig {
 }
 
 impl AuthServerConfig {
-    pub fn read(path: &PathBuf) -> Result<Self> {
+    pub async fn read(path: &PathBuf) -> Result<Self> {
         let file = std::fs::File::open(path)?;
         serde_yaml::from_reader(file).context("could not read yaml file")
     }
 
-    pub fn write(&self, path: &PathBuf) -> Result<()> {
+    pub async fn write(&self, path: &PathBuf) -> Result<()> {
         let file = std::fs::File::create(path)?;
         serde_yaml::to_writer(file, self).context("could not write yaml file")
     }

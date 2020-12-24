@@ -10,18 +10,18 @@
     clippy::useless_conversion
 )]
 
-use async_std::task;
-use game::accounts::AccountService;
 use std::net::Ipv4Addr;
 
-use anyhow::{anyhow, Result};
-use authserver::AuthServer;
-use conf::AuthServerConfig;
+use anyhow::Result;
 use human_panic::setup_panic;
-use opt::{AccountCommand, Opt};
 use structopt::StructOpt;
 
-use ui::{Repl, Tui, UI};
+use crate::authserver::AuthServer;
+use crate::opt::{AccountCommand, Opt};
+use crate::ui::{Repl, Tui, UI};
+use conf::AuthServerConfig;
+use game::accounts::AccountService;
+use mysql::accounts::MySQLAccountService;
 
 mod authserver;
 mod conf;
@@ -29,12 +29,13 @@ mod opt;
 mod protocol;
 mod ui;
 
-fn main() -> Result<()> {
+#[async_std::main]
+async fn main() -> Result<()> {
     setup_panic!();
     tracing_subscriber::fmt::init();
 
     let opts: Opt = Opt::from_args();
-    let config = AuthServerConfig::read(&opts.config);
+    let config = AuthServerConfig::read(&opts.config).await;
 
     match opts.command {
         opt::OptCommand::Exec(c) => match c {
@@ -46,17 +47,11 @@ fn main() -> Result<()> {
                         email,
                     },
             } => {
-                let config = config?;
-                task::block_on(async {
-                    let accounts = mysql::accounts::AccountService::new(&config.login_database)
-                        .await
-                        .unwrap();
-
-                    match accounts.create_account(&username, &password, &email).await {
-                        Ok(id) => println!("created account {}", id),
-                        Err(e) => eprintln!("failed to create account: {}", e),
-                    };
-                });
+                let accounts = MySQLAccountService::new(&config?.login_database).await?;
+                match accounts.create_account(&username, &password, &email).await {
+                    Ok(id) => println!("created account {}", id),
+                    Err(e) => eprintln!("failed to create account: {}", e),
+                };
             }
             opt::Command::Shutdown => {}
         },
@@ -66,17 +61,17 @@ fn main() -> Result<()> {
                 port: 3724,
                 login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
-            auth.write(&opts.config)?;
+            auth.write(&opts.config).await?;
         }
-        opt::OptCommand::Tui => start_server(opts, Some(Tui {}), &config?)?,
-        opt::OptCommand::Repl => start_server(opts, Some(Repl {}), &config?)?,
-        opt::OptCommand::Log => start_server::<Repl>(opts, None, &config?)?,
+        opt::OptCommand::Tui => start_server(opts, Some(Tui {}), &config?).await?,
+        opt::OptCommand::Repl => start_server(opts, Some(Repl {}), &config?).await?,
+        opt::OptCommand::Log => start_server::<Repl>(opts, None, &config?).await?,
     };
 
     Ok(())
 }
 
-fn start_server<U: 'static + UI + Send>(
+async fn start_server<U: 'static + UI + Send>(
     _opts: Opt,
     _ui: Option<U>,
     config: &AuthServerConfig,
@@ -101,15 +96,13 @@ fn start_server<U: 'static + UI + Send>(
     //     }),
     // });
 
-    task::block_on(async {
-        let accounts = mysql::accounts::AccountService::new("mysql://localhost:49153/auth").await?;
+    let accounts = MySQLAccountService::new("mysql://localhost:49153/auth").await?;
 
-        AuthServer {
-            command_receiver,
-            reply_sender,
-            accounts,
-        }
-        .start(config.bind_address, config.port)
-        .await
-    })
+    AuthServer {
+        command_receiver,
+        reply_sender,
+        accounts,
+    }
+    .start(config.bind_address, config.port)
+    .await
 }

@@ -4,11 +4,11 @@ use tracing::instrument;
 use wow_srp::WowSRPServer;
 
 #[derive(Debug)]
-pub struct AccountService {
+pub struct MySQLAccountService {
     pool: sqlx::MySqlPool,
 }
 
-impl AccountService {
+impl MySQLAccountService {
     pub async fn new(connect: &str) -> Result<Self, sqlx::Error> {
         Ok(Self {
             pool: sqlx::MySqlPool::connect(connect).await?,
@@ -17,7 +17,7 @@ impl AccountService {
 }
 
 #[async_trait]
-impl game::accounts::AccountService for AccountService {
+impl game::accounts::AccountService for MySQLAccountService {
     #[instrument(skip(self))]
     async fn create_account(
         &self,
