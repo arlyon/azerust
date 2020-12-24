@@ -24,6 +24,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let opts: Opt = Opt::from_args();
+    let config = AuthServerConfig::read(&opts.config);
 
     match opts.command {
         opt::OptCommand::Exec(c) => match c {
@@ -35,11 +36,11 @@ fn main() -> Result<()> {
                         email,
                     },
             } => {
+                let config = config?;
                 task::block_on(async {
-                    let accounts =
-                        mysql::accounts::AccountService::new("mysql://localhost:49153/auth")
-                            .await
-                            .unwrap();
+                    let accounts = mysql::accounts::AccountService::new(&config.login_database)
+                        .await
+                        .unwrap();
 
                     match accounts.create_account(&username, &password, &email).await {
                         Ok(id) => println!("created account {}", id),
@@ -55,19 +56,21 @@ fn main() -> Result<()> {
                 port: 3724,
                 login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
-            auth.write(opts.config)?;
+            auth.write(&opts.config)?;
         }
-        opt::OptCommand::Tui => start_server(opts, Some(Tui {}))?,
-        opt::OptCommand::Repl => start_server(opts, Some(Repl {}))?,
-        opt::OptCommand::Log => start_server::<Repl>(opts, None)?,
+        opt::OptCommand::Tui => start_server(opts, Some(Tui {}), &config?)?,
+        opt::OptCommand::Repl => start_server(opts, Some(Repl {}), &config?)?,
+        opt::OptCommand::Log => start_server::<Repl>(opts, None, &config?)?,
     };
 
     Ok(())
 }
 
-fn start_server<'a, U: 'static + UI + Send>(opts: Opt, ui: Option<U>) -> Result<()> {
-    let config = AuthServerConfig::read(opts.config)?;
-
+fn start_server<'a, U: 'static + UI + Send>(
+    opts: Opt,
+    ui: Option<U>,
+    config: &AuthServerConfig,
+) -> Result<()> {
     let (command_sender, command_receiver) = async_std::channel::bounded::<authserver::Command>(10);
     let (reply_sender, reply_receiver) =
         async_std::channel::bounded::<authserver::ServerMessage>(10);
