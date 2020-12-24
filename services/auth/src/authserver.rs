@@ -12,7 +12,7 @@ use derivative::Derivative;
 use derive_more::Display;
 use game::accounts::{Account, AccountService, BanStatus};
 use thiserror::Error;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
 use crate::protocol::{
@@ -178,7 +178,7 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                                 command: AuthCommand::AuthLogonProof,
                                 message: *response,
                             };
-                            let packet = bincode::serialize(&packet).unwrap();
+                            let packet = bincode::serialize(&packet)?;
 
                             debug!("sending packet: {:?}", &packet);
 
@@ -205,21 +205,19 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                             realm_id: 1,
                         }];
 
-                        let resp = RealmListResponse::from_realms(&realms);
+                        let resp = RealmListResponse::from_realms(&realms)?;
 
-                        let mut packet = bincode::DefaultOptions::new()
+                        let mut packet = bincode::options()
                             .with_fixint_encoding()
-                            .serialize(&(AuthCommand::RealmList, resp))
-                            .unwrap();
+                            .serialize(&(AuthCommand::RealmList, resp))?;
 
                         for realm in realms {
                             debug!("sending realm {:?}", realm);
                             packet.append(
-                                &mut bincode::DefaultOptions::new()
+                                &mut bincode::options()
                                     .with_fixint_encoding()
                                     .with_null_terminated_str_encoding()
-                                    .serialize(&realm)
-                                    .unwrap(),
+                                    .serialize(&realm)?,
                             );
                         }
 
@@ -236,10 +234,7 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                 },
                 RequestState::Rejected { stage, status } => {
                     let mut buffer = [0u8; 2];
-                    bincode::DefaultOptions::new()
-                        .with_varint_encoding()
-                        .serialize_into(&mut buffer[..], &(stage, status))
-                        .unwrap();
+                    bincode::options().serialize_into(&mut buffer[..], &(stage, status))?;
                     debug!("sending {:?}", buffer);
                     stream.write(&buffer).await?;
                     stream.flush().await?;
@@ -258,15 +253,9 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     packet: &mut R,
 ) -> Result<Message, PacketHandleError> {
     let mut buffer = [0u8; 128];
-
-    debug!("getting command");
-    packet.read(&mut buffer[..1]).await.unwrap();
-
-    debug!("read {:02X?}", &buffer[..1]);
+    packet.read(&mut buffer[..1]).await?;
 
     let command = AuthCommand::try_from(buffer[0]).expect("this should be valid");
-    debug!("received command {:?}", command);
-
     let command_len = match command {
         AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
         AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
@@ -276,8 +265,8 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
         _ => todo!(),
     };
 
-    let read_length = packet.read(&mut buffer[..command_len]).await.unwrap();
-    debug!(
+    let read_length = packet.read(&mut buffer[..command_len]).await?;
+    trace!(
         "read {:?} bytes into buffer {:02X?}",
         read_length,
         &buffer[..read_length]
@@ -300,7 +289,7 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
         AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
             .map(Message::AuthReconnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        _ => todo!(),
+        _ => Err(PacketHandleError::UnsupportedCommand(command)),
     }
 }
 
@@ -358,6 +347,12 @@ pub enum PacketHandleError {
 
     #[error("received {0}, expected {1}")]
     MessageLength(usize, usize),
+
+    #[error("error while reading packet: {0}")]
+    IoRead(#[from] async_std::io::Error),
+
+    #[error("command is not supported: {0}")]
+    UnsupportedCommand(AuthCommand),
 }
 
 async fn handle_logon_proof(

@@ -1,8 +1,10 @@
 use assert_size_attribute::assert_eq_size;
 use bincode::Options;
+use derive_more::Display;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tracing::debug;
 use wow_srp::WowSRPServer;
 
@@ -13,7 +15,8 @@ const VERSION_CHALLENGE: [u8; 16] = [
 /// All the known OpCodes
 #[repr(u8)]
 #[serde(into = "u8")]
-#[derive(TryFromPrimitive, IntoPrimitive, Debug, Serialize, PartialEq, Eq, Clone, Copy)]
+#[derive(TryFromPrimitive, IntoPrimitive, Debug, Display, Serialize, PartialEq, Eq, Clone, Copy)]
+
 pub enum AuthCommand {
     ConnectRequest = 0x00,
     AuthLogonProof = 0x01,
@@ -205,8 +208,12 @@ pub struct RealmListResponse {
     pub realm_count: u16,
 }
 
+#[derive(Error, Debug)]
+#[error("could not determine the size")]
+pub struct SizeReadError;
+
 impl RealmListResponse {
-    pub fn from_realms(realms: &[Realm]) -> Self {
+    pub fn from_realms(realms: &[Realm]) -> Result<Self, SizeReadError> {
         let len: u64 = realms
             .iter()
             .map(|r| {
@@ -214,15 +221,15 @@ impl RealmListResponse {
                     .with_null_terminated_str_encoding()
                     .with_fixint_encoding()
                     .serialized_size(r)
-                    .unwrap()
+                    .map_err(|_| SizeReadError)
             })
-            .sum();
+            .sum::<Result<u64, SizeReadError>>()?;
 
-        Self {
+        Ok(Self {
             packet_size: 4 + 2 + len as u16 + 2,
             data: [0, 0, 0, 0],
             realm_count: realms.len() as u16,
-        }
+        })
     }
 }
 
@@ -256,17 +263,6 @@ impl ReplyPacket<ConnectChallenge> {
             unknown: 0,
             status: ReturnCode::Success,
             message,
-        }
-    }
-}
-
-impl ReplyPacket<()> {
-    pub fn new(command: AuthCommand, status: ReturnCode) -> Self {
-        Self {
-            command,
-            unknown: 0,
-            status,
-            message: (),
         }
     }
 }

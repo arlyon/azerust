@@ -171,7 +171,7 @@ impl WowSRPServer {
         sha.update(a_pub);
         sha.update(client_proof);
         sha.update(session_key);
-        sha.finalize().try_into().expect("this is 20 bytes")
+        sha.finalize().try_into().expect("sha1 hashes are 20 bytes")
     }
 
     /// Verify the challenge response, returning a verified key if

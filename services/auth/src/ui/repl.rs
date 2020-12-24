@@ -59,8 +59,7 @@ impl UI for Repl {
                             password,
                             username,
                         })
-                        .await
-                        .unwrap();
+                        .await?;
                         print_output(&r).await;
                     }
                 },
@@ -79,7 +78,7 @@ impl UI for Repl {
             }
         }
 
-        s.send(authserver::Command::ShutDown).await.unwrap();
+        s.send(authserver::Command::ShutDown).await?;
         print_output(&r).await;
         let _ = rl.save_history(".auth.history");
 

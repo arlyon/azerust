@@ -7,7 +7,8 @@
     unsafe_code,
     unused_import_braces,
     unused_qualifications,
-    clippy::useless_conversion
+    clippy::useless_conversion,
+    clippy::unwrap_used
 )]
 
 use std::net::Ipv4Addr;
