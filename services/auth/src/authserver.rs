@@ -21,7 +21,7 @@ use crate::protocol::{
         AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
         RealmListResponse, ReconnectProof, ReplyPacket, ReplyPacket2, ReturnCode,
     },
-    Message, MessageParseError,
+    read_packet, Message, MessageParseError,
 };
 
 /// Messages to the UI from the server
@@ -172,23 +172,17 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
 
                         state
                     }
-                    Err(_e) => RequestState::Rejected {
-                        command: AuthCommand::ConnectRequest,
-                        reason: ReturnCode::Failed,
-                    },
-                    _ => return Err(anyhow!("invalid state")),
+                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
+                    Err(e) => return Err(e.into()),
                 },
                 RequestState::ConnectChallenge {
                     account, server, ..
                 } => match read_packet(&mut reader).await {
                     Ok(Message::AuthLogonProof(p)) => {
-                        let state = match handle_logon_proof(p, server, &account).await {
+                        let state = match handle_connect_proof(p, server, &account).await {
                             Ok(s) => s,
                             Err(status) => {
-                                state = RequestState::Rejected {
-                                    command: AuthCommand::AuthLogonProof,
-                                    reason: status,
-                                };
+                                state = RequestState::reject_from(state, status);
                                 continue;
                             }
                         };
@@ -207,8 +201,8 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
 
                         state
                     }
+                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
                     Err(e) => return Err(e.into()),
-                    _ => return Err(anyhow!("invalid state")),
                 },
                 RequestState::Authenticated { .. } => match read_packet(&mut reader).await {
                     Ok(Message::RealmList(_r)) => {
@@ -248,15 +242,12 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
 
                         RequestState::Done
                     }
+                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
                     Err(e) => return Err(e.into()),
-                    _ => return Err(anyhow!("invalid state")),
                 },
-                RequestState::Rejected {
-                    command: stage,
-                    reason: status,
-                } => {
+                RequestState::Rejected { command, reason } => {
                     let mut buffer = [0u8; 2];
-                    bincode::options().serialize_into(&mut buffer[..], &(stage, status))?;
+                    bincode::options().serialize_into(&mut buffer[..], &(command, reason))?;
                     debug!("sending {:?}", buffer);
                     stream.write(&buffer).await?;
                     stream.flush().await?;
@@ -267,47 +258,6 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
         }
 
         Ok(())
-    }
-}
-
-#[instrument(skip(packet))]
-pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
-    packet: &mut R,
-) -> Result<Message, PacketHandleError> {
-    let mut buffer = [0u8; 128];
-    packet.read(&mut buffer[..1]).await?;
-
-    let command = AuthCommand::try_from(buffer[0])?;
-    let command_len = match command {
-        AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
-        AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
-        AuthCommand::AuthReconnectChallenge => std::mem::size_of::<ConnectRequest>(),
-        AuthCommand::AuthReconnectProof => std::mem::size_of::<ReconnectProof>(),
-        AuthCommand::RealmList => return Ok(Message::RealmList(Default::default())),
-        c => return Err(PacketHandleError::UnsupportedCommand(c)),
-    };
-
-    let read_len = packet.read(&mut buffer[..command_len]).await?;
-    trace!("read {:?} into {:02X?}", read_len, &buffer[..read_len]);
-
-    if read_len != command_len {
-        return Err(PacketHandleError::MessageLength(read_len, command_len));
-    }
-
-    match command {
-        AuthCommand::ConnectRequest => bincode::deserialize(&buffer[..])
-            .map(Message::ConnectRequest)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthLogonProof => bincode::deserialize(&buffer[..])
-            .map(Message::AuthLogonProof)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectChallenge => bincode::deserialize(&buffer[..])
-            .map(Message::AuthReconnectChallenge)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
-            .map(Message::AuthReconnectProof)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        _ => Err(PacketHandleError::UnsupportedCommand(command)),
     }
 }
 
@@ -358,26 +308,8 @@ async fn handle_connect_request(
     })
 }
 
-#[derive(Error, Debug)]
-pub enum PacketHandleError {
-    #[error("could not parse message: {0}")]
-    MessageParse(#[from] MessageParseError),
-
-    #[error("received {0}, expected {1}")]
-    MessageLength(usize, usize),
-
-    #[error("error while reading packet: {0}")]
-    IoRead(#[from] async_std::io::Error),
-
-    #[error("command is not currently supported: {0}")]
-    UnsupportedCommand(AuthCommand),
-
-    #[error("command is invalid: {0}")]
-    InvalidCommand(#[from] TryFromPrimitiveError<AuthCommand>),
-}
-
 #[instrument(skip(proof, server, _account))]
-async fn handle_logon_proof(
+async fn handle_connect_proof(
     proof: ConnectProof,
     server: WowSRPServer,
     _account: &Account,

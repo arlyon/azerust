@@ -1,7 +1,10 @@
+use async_std::prelude::*;
 use std::convert::TryFrom;
 
 use derive_more::Display;
+use num_enum::TryFromPrimitiveError;
 use thiserror::Error;
+use tracing::{instrument, trace};
 
 use self::packets::{AuthCommand, ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
 
@@ -51,4 +54,63 @@ impl TryFrom<&[u8]> for Message {
 pub enum MessageParseError {
     InvalidCommand(u8),
     DecodeError(#[from] Box<bincode::ErrorKind>),
+}
+
+#[instrument(skip(packet))]
+pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
+    packet: &mut R,
+) -> Result<Message, PacketHandleError> {
+    let mut buffer = [0u8; 128];
+    packet.read(&mut buffer[..1]).await?;
+
+    let command = AuthCommand::try_from(buffer[0])?;
+    let command_len = match command {
+        AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
+        AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
+        AuthCommand::AuthReconnectChallenge => std::mem::size_of::<ConnectRequest>(),
+        AuthCommand::AuthReconnectProof => std::mem::size_of::<ReconnectProof>(),
+        AuthCommand::RealmList => return Ok(Message::RealmList(Default::default())),
+        c => return Err(PacketHandleError::UnsupportedCommand(c)),
+    };
+
+    let read_len = packet.read(&mut buffer[..command_len]).await?;
+    trace!("read {:?} into {:02X?}", read_len, &buffer[..read_len]);
+
+    if read_len != command_len {
+        return Err(PacketHandleError::MessageLength(read_len, command_len));
+    }
+
+    match command {
+        AuthCommand::ConnectRequest => bincode::deserialize(&buffer[..])
+            .map(Message::ConnectRequest)
+            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+        AuthCommand::AuthLogonProof => bincode::deserialize(&buffer[..])
+            .map(Message::AuthLogonProof)
+            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+        AuthCommand::AuthReconnectChallenge => bincode::deserialize(&buffer[..])
+            .map(Message::AuthReconnectChallenge)
+            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+        AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
+            .map(Message::AuthReconnectProof)
+            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+        _ => Err(PacketHandleError::UnsupportedCommand(command)),
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum PacketHandleError {
+    #[error("could not parse message: {0}")]
+    MessageParse(#[from] MessageParseError),
+
+    #[error("received {0}, expected {1}")]
+    MessageLength(usize, usize),
+
+    #[error("error while reading packet: {0}")]
+    IoRead(#[from] async_std::io::Error),
+
+    #[error("command is not currently supported: {0}")]
+    UnsupportedCommand(AuthCommand),
+
+    #[error("command is invalid: {0}")]
+    InvalidCommand(#[from] TryFromPrimitiveError<AuthCommand>),
 }

@@ -15,7 +15,6 @@ const VERSION_CHALLENGE: [u8; 16] = [
 #[repr(u8)]
 #[serde(into = "u8")]
 #[derive(TryFromPrimitive, IntoPrimitive, Debug, Display, Serialize, PartialEq, Eq, Clone, Copy)]
-
 pub enum AuthCommand {
     ConnectRequest = 0x00,
     AuthLogonProof = 0x01,
@@ -29,7 +28,7 @@ pub enum AuthCommand {
     TransferCancel = 0x34,
 }
 
-/// All the known ReturnCodes
+/// All the known return codes from the API
 #[repr(u8)]
 #[serde(into = "u8")]
 #[derive(Serialize, IntoPrimitive, Debug, PartialEq, Eq, Clone, Copy)]
@@ -208,8 +207,8 @@ pub struct RealmListResponse {
 }
 
 #[derive(Error, Debug)]
-#[error("could not determine the size")]
-pub struct SizeReadError;
+#[error("could not determine the size of realm {0}")]
+pub struct SizeReadError(String);
 
 impl RealmListResponse {
     pub fn from_realms(realms: &[Realm]) -> Result<Self, SizeReadError> {
@@ -220,7 +219,7 @@ impl RealmListResponse {
                     .with_null_terminated_str_encoding()
                     .with_fixint_encoding()
                     .serialized_size(r)
-                    .map_err(|_| SizeReadError)
+                    .map_err(|_| SizeReadError(r.name.clone()))
             })
             .sum::<Result<u64, SizeReadError>>()?;
 
