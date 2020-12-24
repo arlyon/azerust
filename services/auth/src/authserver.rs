@@ -82,13 +82,13 @@ pub enum RequestState {
 }
 
 impl RequestState {
-    fn reject_from(state: Self, reason: ReturnCode) -> Self {
+    fn reject_from(state: &Self, reason: ReturnCode) -> Self {
         Self::Rejected {
             command: match state {
                 RequestState::Start => AuthCommand::ConnectRequest,
                 RequestState::ConnectChallenge { .. } => AuthCommand::AuthLogonProof,
                 RequestState::Authenticated { .. } => AuthCommand::RealmList,
-                RequestState::Rejected { command, .. } => command,
+                RequestState::Rejected { command, .. } => *command,
                 RequestState::Done => AuthCommand::RealmList,
             },
             reason,
@@ -147,7 +147,7 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                                 Ok(s) => s,
                                 Err(e) => {
                                     error!("user connected with invalid username: {}", e);
-                                    state = RequestState::reject_from(state, ReturnCode::Failed);
+                                    state = RequestState::reject_from(&state, ReturnCode::Failed);
                                     continue;
                                 }
                             }
@@ -157,7 +157,7 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                             match handle_connect_request(request, username, &self.accounts).await {
                                 Ok(s) => s,
                                 Err(reason) => {
-                                    state = RequestState::reject_from(state, reason);
+                                    state = RequestState::reject_from(&state, reason);
                                     continue;
                                 }
                             };
@@ -176,13 +176,15 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                     Err(e) => return Err(e.into()),
                 },
                 RequestState::ConnectChallenge {
-                    account, server, ..
+                    ref account,
+                    server,
+                    ..
                 } => match read_packet(&mut reader).await {
                     Ok(Message::AuthLogonProof(p)) => {
                         let state = match handle_connect_proof(p, server, &account).await {
                             Ok(s) => s,
                             Err(status) => {
-                                state = RequestState::reject_from(state, status);
+                                state = RequestState::reject_from(&state, status);
                                 continue;
                             }
                         };
