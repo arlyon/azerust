@@ -1,1 +1,4 @@
 /target
+.env
+.auth.history
+config.yaml
