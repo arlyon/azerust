@@ -4,6 +4,7 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
+use num_enum::TryFromPrimitiveError;
 use std::{convert::TryFrom, net::Ipv4Addr, str};
 
 use anyhow::{anyhow, Context, Result};
@@ -276,25 +277,21 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     let mut buffer = [0u8; 128];
     packet.read(&mut buffer[..1]).await?;
 
-    let command = AuthCommand::try_from(buffer[0]).expect("this should be valid");
+    let command = AuthCommand::try_from(buffer[0])?;
     let command_len = match command {
         AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
         AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
         AuthCommand::AuthReconnectChallenge => std::mem::size_of::<ConnectRequest>(),
         AuthCommand::AuthReconnectProof => std::mem::size_of::<ReconnectProof>(),
         AuthCommand::RealmList => return Ok(Message::RealmList(Default::default())),
-        _ => todo!(),
+        c => return Err(PacketHandleError::UnsupportedCommand(c)),
     };
 
-    let read_length = packet.read(&mut buffer[..command_len]).await?;
-    trace!(
-        "read {:?} bytes into buffer {:02X?}",
-        read_length,
-        &buffer[..read_length]
-    );
+    let read_len = packet.read(&mut buffer[..command_len]).await?;
+    trace!("read {:?} into {:02X?}", read_len, &buffer[..read_len]);
 
-    if read_length != command_len {
-        return Err(PacketHandleError::MessageLength(read_length, command_len));
+    if read_len != command_len {
+        return Err(PacketHandleError::MessageLength(read_len, command_len));
     }
 
     match command {
@@ -372,26 +369,30 @@ pub enum PacketHandleError {
     #[error("error while reading packet: {0}")]
     IoRead(#[from] async_std::io::Error),
 
-    #[error("command is not supported: {0}")]
+    #[error("command is not currently supported: {0}")]
     UnsupportedCommand(AuthCommand),
+
+    #[error("command is invalid: {0}")]
+    InvalidCommand(#[from] TryFromPrimitiveError<AuthCommand>),
 }
 
+#[instrument(skip(proof, server, _account))]
 async fn handle_logon_proof(
-    p: ConnectProof,
+    proof: ConnectProof,
     server: WowSRPServer,
     _account: &Account,
 ) -> Result<RequestState, ReturnCode> {
-    let session_key = match server.verify_challenge_response(&p.user_public_key, &p.user_proof) {
-        Some(k) => k,
-        None => {
-            debug!("failed password");
-            return Err(ReturnCode::IncorrectPassword);
-        }
-    };
+    let session_key =
+        match server.verify_challenge_response(&proof.user_public_key, &proof.user_proof) {
+            Some(k) => k,
+            None => {
+                debug!("failed password");
+                return Err(ReturnCode::IncorrectPassword);
+            }
+        };
 
-    let server_proof = server.get_server_proof(&p.user_public_key, &p.user_proof, &session_key);
-
-    println!("server proof: {:?}", server_proof);
+    let server_proof =
+        server.get_server_proof(&proof.user_public_key, &proof.user_proof, &session_key);
 
     let response = ConnectProofResponse {
         error: 0,

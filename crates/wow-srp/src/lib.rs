@@ -223,20 +223,6 @@ impl WowSRPServer {
             sha.finalize()
         };
 
-        println!("A: {}", a_pub_num);
-        println!("I: {:02X?}", self.identity_hash);
-        println!("I: {:?}", self.identity_hash);
-        println!("v: {}", verifier);
-        println!("b: {}", b);
-        println!("B: {:?}", self.b_pub);
-        println!("u: {}", u);
-        println!("S: {:?}", premaster_secret.to_bytes_be());
-        println!("K: {:?}", session_key);
-        println!("s: {:?}", &self.salt.0);
-        println!("hash: {:?}", hn_xor_hg);
-        println!("M1: {:?}", server_m);
-        println!("M2: {:?}", client_m);
-
         if server_m.as_slice() == client_m {
             Some(session_key)
         } else {
@@ -253,9 +239,6 @@ impl WowSRPServer {
             .to_bytes_le()
             .try_into()
             .expect("correct size");
-        println!("b_pub: {:?}", b_pub);
-        println!("b: {:?}", b);
-        println!("v: {:?}", v.0);
         b_pub
     }
 
@@ -268,9 +251,6 @@ impl WowSRPServer {
             right[i] = split[1];
         }
 
-        println!("left: {:?}", left);
-        println!("right: {:?}", right);
-
         let start = premaster_secret
             .iter()
             .enumerate()
@@ -279,13 +259,8 @@ impl WowSRPServer {
             .unwrap_or(premaster_secret.len())
             / 2;
 
-        println!("start: {}", start);
-
         let left = Sha1::digest(&left[start..]);
         let right = Sha1::digest(&right[start..]);
-
-        println!("left: {:?}", left);
-        println!("right: {:?}", right);
 
         let mut k = [0u8; 40];
         for (i, original) in k.chunks_mut(2).enumerate() {

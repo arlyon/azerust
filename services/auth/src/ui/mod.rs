@@ -1,5 +1,4 @@
-use async_std::channel::Receiver;
-use async_std::channel::Sender;
+use async_std::channel::{Receiver, Sender};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -8,8 +7,7 @@ mod event;
 mod repl;
 mod tui;
 
-pub use self::repl::Repl;
-pub use self::tui::Tui;
+pub use self::{repl::Repl, tui::Tui};
 
 use crate::authserver::{Command, ServerMessage};
 

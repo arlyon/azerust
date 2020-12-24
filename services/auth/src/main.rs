@@ -8,7 +8,9 @@
     unused_import_braces,
     unused_qualifications,
     clippy::useless_conversion,
-    clippy::unwrap_used
+    clippy::unwrap_used,
+    clippy::todo,
+    clippy::unimplemented
 )]
 
 use std::net::Ipv4Addr;
@@ -17,9 +19,11 @@ use anyhow::Result;
 use human_panic::setup_panic;
 use structopt::StructOpt;
 
-use crate::authserver::AuthServer;
-use crate::opt::{AccountCommand, Opt};
-use crate::ui::{Repl, Tui, UI};
+use crate::{
+    authserver::AuthServer,
+    opt::{AccountCommand, Opt},
+    ui::{Repl, Tui, UI},
+};
 use conf::AuthServerConfig;
 use game::accounts::AccountService;
 use mysql::accounts::MySQLAccountService;

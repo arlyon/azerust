@@ -1,5 +1,4 @@
-use async_std::channel::Receiver;
-use async_std::channel::Sender;
+use async_std::channel::{Receiver, Sender};
 
 use anyhow::Result;
 use authserver::ServerMessage;
@@ -7,8 +6,10 @@ use colored::*;
 use rustyline::{error::ReadlineError, Editor};
 use structopt::StructOpt;
 
-use crate::authserver;
-use crate::opt::{AccountCommand, Command};
+use crate::{
+    authserver,
+    opt::{AccountCommand, Command},
+};
 
 use super::UI;
 use async_trait::async_trait;
