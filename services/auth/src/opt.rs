@@ -21,7 +21,7 @@ pub enum OptCommand {
     Repl,
     /// Run the server just viewing logs.
     Log,
-    /// Init the config file.
+    /// Generate a new config file.
     Init,
 }
 
