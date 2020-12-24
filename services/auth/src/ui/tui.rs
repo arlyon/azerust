@@ -17,8 +17,8 @@ use tui::{
 impl From<&ServerMessage> for ListItem<'_> {
     fn from(r: &ServerMessage) -> Self {
         ListItem::new(match r {
-            ServerMessage::Ready => format!("Server ready."),
-            ServerMessage::Update(u) => format!("{}", u),
+            ServerMessage::Ready => "Server ready.".to_string(),
+            ServerMessage::Update(u) => u.to_string(),
             ServerMessage::Complete(c) => format!("{}", c.green()),
             ServerMessage::Error(e) => format!("{}", e.red()),
         })

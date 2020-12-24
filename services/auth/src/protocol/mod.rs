@@ -7,6 +7,7 @@ use self::packets::{AuthCommand, ConnectProof, ConnectRequest, RealmListRequest,
 
 pub mod packets;
 
+/// The various messages that we can receive from the client.
 #[repr(u8)]
 #[derive(Debug)]
 pub enum Message {
@@ -29,16 +30,16 @@ impl TryFrom<&[u8]> for Message {
             .map_err(|_| MessageParseError::InvalidCommand(command))
             .and_then(|c| match c {
                 AuthCommand::ConnectRequest => bincode::deserialize(data)
-                    .map(|d| Message::ConnectRequest(d))
+                    .map(Message::ConnectRequest)
                     .map_err(Into::into),
                 AuthCommand::AuthLogonProof => bincode::deserialize(data)
-                    .map(|d| Message::AuthLogonProof(d))
+                    .map(Message::AuthLogonProof)
                     .map_err(Into::into),
                 AuthCommand::AuthReconnectChallenge => bincode::deserialize(data)
-                    .map(|d| Message::AuthReconnectChallenge(d))
+                    .map(Message::AuthReconnectChallenge)
                     .map_err(Into::into),
                 AuthCommand::AuthReconnectProof => bincode::deserialize(data)
-                    .map(|d| Message::AuthReconnectProof(d))
+                    .map(Message::AuthReconnectProof)
                     .map_err(Into::into),
                 AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
                 _ => Err(MessageParseError::InvalidCommand(command)),

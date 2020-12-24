@@ -39,7 +39,7 @@ impl UI for Repl {
             match readline.map(|line| {
                 rl.add_history_entry(line.as_str());
 
-                let mut line = line.split(" ").collect::<Vec<&str>>();
+                let mut line = line.split(' ').collect::<Vec<&str>>();
                 line.insert(0, "");
 
                 Command::from_iter_safe(line)
@@ -63,7 +63,6 @@ impl UI for Repl {
                         .unwrap();
                         print_output(&r).await;
                     }
-                    c => println!("{:?}", c),
                 },
                 Ok(Err(e)) => {
                     println!("{}", e.message);

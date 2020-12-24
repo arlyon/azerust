@@ -1,10 +1,20 @@
 #![feature(arbitrary_enum_discriminant)]
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unused_import_braces,
+    unused_qualifications,
+    clippy::useless_conversion
+)]
 
 use async_std::task;
 use game::accounts::AccountService;
 use std::net::Ipv4Addr;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use authserver::AuthServer;
 use conf::AuthServerConfig;
 use human_panic::setup_panic;
@@ -45,14 +55,14 @@ fn main() -> Result<()> {
                     match accounts.create_account(&username, &password, &email).await {
                         Ok(id) => println!("created account {}", id),
                         Err(e) => eprintln!("failed to create account: {}", e),
-                    }
+                    };
                 });
             }
             opt::Command::Shutdown => {}
         },
         opt::OptCommand::Init => {
             let auth = AuthServerConfig {
-                bind_address: "0.0.0.0".parse::<Ipv4Addr>().unwrap().into(),
+                bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
                 login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
@@ -66,13 +76,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn start_server<'a, U: 'static + UI + Send>(
-    opts: Opt,
-    ui: Option<U>,
+fn start_server<U: 'static + UI + Send>(
+    _opts: Opt,
+    _ui: Option<U>,
     config: &AuthServerConfig,
 ) -> Result<()> {
-    let (command_sender, command_receiver) = async_std::channel::bounded::<authserver::Command>(10);
-    let (reply_sender, reply_receiver) =
+    let (_command_sender, command_receiver) =
+        async_std::channel::bounded::<authserver::Command>(10);
+    let (reply_sender, _reply_receiver) =
         async_std::channel::bounded::<authserver::ServerMessage>(10);
 
     // let e1 = thread::spawn(move || match ui {
@@ -91,9 +102,7 @@ fn start_server<'a, U: 'static + UI + Send>(
     // });
 
     task::block_on(async {
-        let accounts = mysql::accounts::AccountService::new("mysql://localhost:49153/auth")
-            .await
-            .unwrap();
+        let accounts = mysql::accounts::AccountService::new("mysql://localhost:49153/auth").await?;
 
         AuthServer {
             command_receiver,

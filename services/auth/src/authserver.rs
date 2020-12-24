@@ -4,10 +4,7 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use std::{
-    convert::{TryFrom, TryInto},
-    net::Ipv4Addr,
-};
+use std::{convert::TryFrom, net::Ipv4Addr};
 
 use anyhow::{anyhow, Context, Result};
 use bincode::Options;
@@ -27,7 +24,7 @@ use crate::protocol::{
 };
 
 /// Messages to the UI from the server
-#[derive(PartialEq, Display)]
+#[derive(PartialEq, Display, Debug)]
 pub enum ServerMessage {
     Ready,
     Update(String),
@@ -79,9 +76,11 @@ pub enum RequestState {
         status: ReturnCode,
     },
 
+    /// We are done with the request.
     Done,
 }
 
+/// Implements a WoW authentication server.
 #[derive(Debug)]
 pub struct AuthServer<T: AccountService + std::fmt::Debug> {
     pub command_receiver: Receiver<Command>,
@@ -90,6 +89,7 @@ pub struct AuthServer<T: AccountService + std::fmt::Debug> {
 }
 
 impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
+    /// Start the server, handling requests on the provided host and port.
     #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
         let addr = format!("{}:{}", host, port);
@@ -142,24 +142,18 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
 
                         if let RequestState::ConnectChallenge { response, .. } = &state {
                             let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
-                            let len = bincode::DefaultOptions::new()
-                                .with_varint_encoding()
-                                .serialized_size(&packet)
-                                .unwrap() as usize;
-                            bincode::DefaultOptions::new()
-                                .with_varint_encoding()
-                                .serialize_into(&mut buffer[..len], &packet)
-                                .unwrap();
+                            let len = bincode::options().serialized_size(&packet)? as usize;
+                            bincode::options().serialize_into(&mut buffer[..len], &packet)?;
 
-                            debug!("packet: {:02X?}", &buffer[..len as usize]);
+                            debug!("packet: {:02X?}", &buffer[..len]);
 
-                            stream.write(&buffer[..len as usize]).await?;
+                            stream.write(&buffer[..len]).await?;
                             stream.flush().await?;
                         }
 
                         state
                     }
-                    Err(e) => RequestState::Rejected {
+                    Err(_e) => RequestState::Rejected {
                         stage: AuthCommand::ConnectRequest,
                         status: ReturnCode::Failed,
                     },
@@ -295,16 +289,16 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
 
     match command {
         AuthCommand::ConnectRequest => bincode::deserialize(&buffer[..])
-            .map(|d| Message::ConnectRequest(d))
+            .map(Message::ConnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthLogonProof => bincode::deserialize(&buffer[..])
-            .map(|d| Message::AuthLogonProof(d))
+            .map(Message::AuthLogonProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthReconnectChallenge => bincode::deserialize(&buffer[..])
-            .map(|d| Message::AuthReconnectChallenge(d))
+            .map(Message::AuthReconnectChallenge)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
-            .map(|d| Message::AuthReconnectProof(d))
+            .map(Message::AuthReconnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         _ => todo!(),
     }
@@ -343,8 +337,8 @@ async fn handle_logon_request(
 
     debug!("got user {:?}", account);
 
-    let salt = Salt(account.salt.clone().try_into().expect("32 bytes"));
-    let verifier = Verifier(account.verifier.clone().try_into().expect("32 bytes"));
+    let salt = Salt(account.salt);
+    let verifier = Verifier(account.verifier);
     let server = WowSRPServer::new(&account.username, salt, verifier);
 
     Ok(RequestState::ConnectChallenge {
@@ -353,7 +347,7 @@ async fn handle_logon_request(
             security_flags: 0,
         },
         server,
-        account: account,
+        account,
     })
 }
 
@@ -369,7 +363,7 @@ pub enum PacketHandleError {
 async fn handle_logon_proof(
     p: ConnectProof,
     server: WowSRPServer,
-    account: &Account,
+    _account: &Account,
 ) -> Result<RequestState, ReturnCode> {
     let session_key = match server.verify_challenge_response(&p.user_public_key, &p.user_proof) {
         Some(k) => k,
