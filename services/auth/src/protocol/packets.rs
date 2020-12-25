@@ -70,6 +70,7 @@ impl From<LoginFailure> for ReturnCode {
             LoginFailure::Banned => ReturnCode::Banned,
             LoginFailure::UnknownAccount => ReturnCode::UnknownAccount,
             LoginFailure::IncorrectPassword => ReturnCode::IncorrectPassword,
+            LoginFailure::DatabaseError => ReturnCode::Failed,
         }
     }
 }
@@ -319,11 +320,11 @@ pub struct ReplyPacket2 {
 #[cfg(test)]
 mod test {
     use game::accounts::{Account, AccountId};
-    use mysql::accounts::MySQLLoginVerifier;
+    
     use test_case::test_case;
 
     use bincode::Options;
-    use wow_srp::{Salt, Verifier};
+    use wow_srp::{Salt, Verifier, WowSRPServer};
 
     use super::{
         AuthCommand, ConnectChallenge, ConnectProofResponse, Realm, RealmListResponse, ReplyPacket,
@@ -437,7 +438,18 @@ mod test {
             ban_status: None,
         };
 
-        let message = ConnectChallenge::from_login_handler(&MySQLLoginVerifier::from(account));
+        let server = WowSRPServer::new(&account.username, account.salt, account.verifier);
+        let message = ConnectChallenge {
+            b_pub: [
+                192, 43, 132, 161, 6, 98, 166, 88, 39, 75, 73, 80, 84, 249, 113, 192, 25, 201, 13,
+                134, 177, 68, 175, 141, 209, 131, 57, 143, 83, 18, 127, 53,
+            ],
+            g: server.get_g(),
+            n: server.get_n(),
+            s: account.salt,
+            security_flags: 0,
+        };
+
         assert_eq!(&bincode::options().serialize(&message).unwrap(), &data)
     }
 

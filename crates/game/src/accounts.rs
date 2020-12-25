@@ -58,6 +58,7 @@ pub enum LoginFailure {
     Banned,
     UnknownAccount,
     IncorrectPassword,
+    DatabaseError,
 }
 
 /// An account service handles all the business logic for accounts.
@@ -74,5 +75,7 @@ pub trait AccountService<H: LoginVerifier> {
 
     async fn get_account(&self, username: &str) -> Result<Account, AccountOpError>;
 
+    /// Start a login in the system. This function returns a LoginVerifier
+    /// which can be used to handle the second stage of the login.
     async fn initiate_login(&self, username: &str) -> Result<H, LoginFailure>;
 }

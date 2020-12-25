@@ -1,11 +1,14 @@
 use async_trait::async_trait;
-use game::accounts::{
-    Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginVerifier,
+use game::{
+    accounts::{
+        Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginVerifier,
+    },
+    types::Locale,
 };
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 use wow_srp::{Salt, WowSRPServer};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MySQLAccountService {
     pool: sqlx::MySqlPool,
 }
@@ -18,18 +21,8 @@ impl MySQLAccountService {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct MySQLLoginVerifier(WowSRPServer);
-
-impl From<Account> for MySQLLoginVerifier {
-    fn from(account: Account) -> Self {
-        Self(WowSRPServer::new(
-            &account.username,
-            account.salt,
-            account.verifier,
-        ))
-    }
-}
+#[derive(Debug, Clone)]
+pub struct MySQLLoginVerifier(WowSRPServer, sqlx::MySqlPool);
 
 #[async_trait]
 impl LoginVerifier for MySQLLoginVerifier {
@@ -62,10 +55,30 @@ impl LoginVerifier for MySQLLoginVerifier {
         public_key: &[u8; 32],
         proof: &[u8; 20],
     ) -> Result<[u8; 20], LoginFailure> {
-        self.0
+        let (proof, session_key) = self
+            .0
             .verify_challenge_response(public_key, proof)
-            .map(|session_key| self.0.get_server_proof(public_key, proof, &session_key))
-            .ok_or(LoginFailure::IncorrectPassword)
+            .map(|session_key| {
+                (
+                    self.0.get_server_proof(public_key, proof, &session_key),
+                    session_key,
+                )
+            })
+            .ok_or(LoginFailure::IncorrectPassword)?;
+
+        // update session information
+        // todo(arlyon) set this information
+        sqlx::query!(
+            "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?", 
+            &session_key[..], "0.0.0.0", u8::from(Locale::enUS), "Win", "ARLYON"
+        )
+        .execute(&self.1)
+        .await.map_err(|e| {
+            error!("error updating session: {}", e);
+            LoginFailure::DatabaseError
+        })?;
+
+        Ok(proof)
     }
 }
 
@@ -152,9 +165,8 @@ impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
     }
 
     async fn initiate_login(&self, username: &str) -> Result<MySQLLoginVerifier, LoginFailure> {
-        let account = self.get_account(username).await.ok();
-        let account = match account {
-            Some(Account {
+        let account = match self.get_account(username).await {
+            Ok(Account {
                 ban_status: Some(status),
                 username,
                 ..
@@ -165,11 +177,15 @@ impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
                     BanStatus::Permanent => Err(LoginFailure::Banned),
                 };
             }
-            Some(x) => x,
-            None => {
+            Ok(x) => x,
+            Err(_) => {
                 return Err(LoginFailure::UnknownAccount);
             }
         };
-        Ok(account.into())
+
+        Ok(MySQLLoginVerifier(
+            WowSRPServer::new(&account.username, account.salt, account.verifier),
+            self.pool.clone(),
+        ))
     }
 }
