@@ -1,5 +1,15 @@
 {
   "db": "MySQL",
+  "2b2e8132419fcae71505ca06bfacc0c1a86a3f53c356fc84eef34a253a5ddb4a": {
+    "query": "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 5
+      },
+      "nullable": []
+    }
+  },
   "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf": {
     "query": "INSERT INTO account(username, salt, verifier, reg_mail, email, joindate) VALUES(?, ?, ?, ?, ?, NOW())",
     "describe": {
@@ -8,6 +18,161 @@
         "Right": 5
       },
       "nullable": []
+    }
+  },
+  "7a554c809e6c1d80a4f399dbabf9cc71c37fd3954daeb3acf16cc51d79e49f78": {
+    "query": "SELECT id as 'id: _', name, icon as 'realm_type: _', gamebuild as build, address as 'external_address', localAddress as 'local_address: _', localSubnetMask as 'local_subnet_mask: _', port, flag as 'flags: _', timezone, population FROM realmlist WHERE flag <> 3 ORDER BY id",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "name",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "realm_type: _",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "build",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "external_address",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "local_address: _",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "local_subnet_mask: _",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "port",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "flags: _",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "timezone",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 10,
+          "name": "population",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
     }
   },
   "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
