@@ -1,11 +1,11 @@
 use assert_size_attribute::assert_eq_size;
 use bincode::Options;
 use derive_more::Display;
+use game::accounts::{LoginFailure, LoginHandler};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use thiserror::Error;
-use tracing::debug;
-use wow_srp::WowSRPServer;
+use wow_srp::Salt;
 
 const VERSION_CHALLENGE: [u8; 16] = [
     0xBA, 0xA3, 0x1E, 0x99, 0xA0, 0x0B, 0x21, 0x57, 0xFC, 0x37, 0x3F, 0xB3, 0x69, 0xCD, 0xD2, 0xF1,
@@ -31,7 +31,7 @@ pub enum AuthCommand {
 /// All the known return codes from the API
 #[repr(u8)]
 #[serde(into = "u8")]
-#[derive(Serialize, IntoPrimitive, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Serialize, IntoPrimitive, Debug, PartialEq, Eq, Clone, Copy, Display)]
 pub enum ReturnCode {
     Success = 0x00,
     Failed = 0x01,
@@ -63,6 +63,17 @@ pub enum ReturnCode {
     Disconnected = 0xFF,
 }
 
+impl From<LoginFailure> for ReturnCode {
+    fn from(f: LoginFailure) -> Self {
+        match f {
+            LoginFailure::Suspended => ReturnCode::Suspended,
+            LoginFailure::Banned => ReturnCode::Banned,
+            LoginFailure::UnknownAccount => ReturnCode::UnknownAccount,
+            LoginFailure::IncorrectPassword => ReturnCode::IncorrectPassword,
+        }
+    }
+}
+
 /// ConnectRequest is sent to the server by a client
 /// looking to freshly connect to the server.
 #[repr(packed(1), C)]
@@ -91,8 +102,23 @@ pub struct ConnectRequest {
 /// a ConnectRequest with a challenge for it to solve.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectChallenge {
-    pub server: WowSRPServer,
+    pub b_pub: [u8; 32],
+    pub g: Vec<u8>,
+    pub n: Vec<u8>,
+    pub s: Salt,
     pub security_flags: u8,
+}
+
+impl ConnectChallenge {
+    pub fn from_login_handler(handler: &LoginHandler) -> Self {
+        Self {
+            b_pub: *handler.get_b_pub(),
+            g: handler.get_g(),
+            n: handler.get_n(),
+            s: *handler.get_salt(),
+            security_flags: handler.get_security_flags(),
+        }
+    }
 }
 
 impl Serialize for ConnectChallenge {
@@ -100,25 +126,15 @@ impl Serialize for ConnectChallenge {
     where
         S: serde::Serializer,
     {
-        let g = self.server.get_g();
-        let n = self.server.get_n();
-        let s = self.server.get_salt();
-        let b_pub = self.server.get_b_pub();
-
-        debug!("g: {:02X?}", g);
-        debug!("N: {:02X?}", n);
-        debug!("s: {:02X?}", s);
-        debug!("B: {:02X?}", b_pub);
-
         let len = if self.security_flags & 0x01 > 0 { 3 } else { 0 }
             + if self.security_flags & 0x02 > 0 { 5 } else { 0 }
             + if self.security_flags & 0x04 > 0 { 1 } else { 0 };
 
         let mut state = serializer.serialize_struct("packet", len)?;
-        state.serialize_field("B", &b_pub)?;
-        state.serialize_field("g", &g)?;
-        state.serialize_field("N", &n)?;
-        state.serialize_field("s", &s)?;
+        state.serialize_field("B", &self.b_pub)?;
+        state.serialize_field("g", &self.g)?;
+        state.serialize_field("N", &self.n)?;
+        state.serialize_field("s", &self.s)?;
         state.serialize_field("challenge", &VERSION_CHALLENGE)?;
         state.serialize_field("flags", &self.security_flags)?;
 
@@ -231,18 +247,35 @@ impl RealmListResponse {
     }
 }
 
-/// A single realm in the realmlist. In the
+/// A single realm in the realmlist.
 #[derive(Serialize, Debug)]
 pub struct Realm {
     pub realm_type: u8,
+    /// This is set if, for example, it is a GM world.
     pub locked: bool,
     pub flags: u8,
     pub name: String,
     pub socket: String,
-    pub pop_level: f32,
+    pub population: f32,
     pub character_count: u8,
     pub timezone: u8,
     pub realm_id: u8,
+}
+
+impl Realm {
+    pub fn from_realm(r: &game::realms::Realm, character_count: u8, locked: bool) -> Self {
+        Self {
+            realm_type: r.realm_type.into(),
+            locked,
+            flags: r.flags,
+            name: r.name.clone(),
+            socket: format!("{}:{}", r.external_address, r.port),
+            population: r.population,
+            character_count,
+            timezone: r.timezone,
+            realm_id: u32::from(r.id) as u8,
+        }
+    }
 }
 
 /// Reply Packet wraps a message with its opcode.
@@ -265,6 +298,17 @@ impl ReplyPacket<ConnectChallenge> {
     }
 }
 
+impl ReplyPacket<()> {
+    pub fn new(command: AuthCommand, status: ReturnCode) -> Self {
+        Self {
+            command,
+            unknown: 0,
+            status,
+            message: (),
+        }
+    }
+}
+
 #[repr(C, packed(1))]
 #[derive(Serialize, Copy, Clone)]
 pub struct ReplyPacket2 {
@@ -274,10 +318,11 @@ pub struct ReplyPacket2 {
 
 #[cfg(test)]
 mod test {
+    use game::accounts::{Account, AccountId};
     use test_case::test_case;
 
     use bincode::Options;
-    use wow_srp::{Salt, Verifier, WowSRPServer};
+    use wow_srp::{Salt, Verifier};
 
     use super::{
         AuthCommand, ConnectChallenge, ConnectProofResponse, Realm, RealmListResponse, ReplyPacket,
@@ -292,7 +337,7 @@ mod test {
             flags: 0,
             name: "Blackrock".into(),
             socket: "51.178.64.97:8095".into(),
-            pop_level: 0f32,
+            population: 0f32,
             character_count: 0,
             timezone: 8,
             realm_id: 2,
@@ -321,7 +366,7 @@ mod test {
         flags: 0,
         name: "Blackrock".into(),
         socket: "51.178.64.97:8095".into(),
-        pop_level: 0f32,
+        population: 0f32,
         character_count: 0,
         timezone: 8,
         realm_id: 3,
@@ -329,7 +374,7 @@ mod test {
         46, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0,
     ] ; "a realm")]
     pub fn realmlist_response_size(realms: &[Realm], data: &[u8]) {
-        let realmlist = RealmListResponse::from_realms(realms);
+        let realmlist = RealmListResponse::from_realms(realms).unwrap();
         assert_eq!(
             &bincode::options()
                 .with_null_terminated_str_encoding()
@@ -379,21 +424,19 @@ mod test {
 
         assert_eq!(data[67..99], salt);
 
-        let server = WowSRPServer::new(
-            "ARLYON",
-            Salt(salt),
-            Verifier([
+        let account = Account {
+            id: AccountId(1),
+            username: "ARLYON".into(),
+            salt: Salt(salt),
+            verifier: Verifier([
                 0x20, 0x1f, 0x11, 0x7e, 0xf2, 0x47, 0x46, 0x91, 0x33, 0x39, 0x3e, 0xc4, 0xbc, 0x98,
                 0xf, 0xdd, 0xa, 0x8a, 0xa7, 0x30, 0x82, 0xde, 0xa1, 0x9a, 0x20, 0x3b, 0x45, 0x4a,
                 0x92, 0xd0, 0x5c, 0x88,
             ]),
-        );
-
-        let message = ConnectChallenge {
-            server,
-            security_flags: 0x0,
+            ban_status: None,
         };
 
+        let message = ConnectChallenge::from_login_handler(&account.into());
         assert_eq!(&bincode::options().serialize(&message).unwrap(), &data)
     }
 

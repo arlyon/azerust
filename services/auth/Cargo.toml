@@ -41,6 +41,7 @@ tui-logger = { version = "0.4.8", path = "../../../tui-logger" }
 wow-srp = { path = "../../crates/wow-srp" }
 game = { path = "../../crates/game" }
 mysql = { path = "../../crates/mysql" }
+enumflags2 = "0.7.0-preview1"
 
 [dev-dependencies]
 test-case = "1.0.0"

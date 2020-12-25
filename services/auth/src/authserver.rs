@@ -4,24 +4,24 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use num_enum::TryFromPrimitiveError;
-use std::{convert::TryFrom, net::Ipv4Addr, str};
+use std::{net::Ipv4Addr, str};
 
 use anyhow::{anyhow, Context, Result};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
-use game::accounts::{Account, AccountService, BanStatus};
-use thiserror::Error;
-use tracing::{debug, error, info, instrument, trace};
-use wow_srp::{Salt, Verifier, WowSRPServer};
+use game::{
+    accounts::{AccountService, LoginHandler},
+    realms::RealmList,
+};
+use tracing::{debug, error, info, instrument};
 
 use crate::protocol::{
     packets::{
         AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
-        RealmListResponse, ReconnectProof, ReplyPacket, ReplyPacket2, ReturnCode,
+        RealmListResponse, ReplyPacket, ReplyPacket2, ReturnCode,
     },
-    read_packet, Message, MessageParseError,
+    read_packet, Message,
 };
 
 /// Messages to the UI from the server
@@ -48,17 +48,17 @@ pub enum Command {
 }
 
 /// Models the various valid states of the server.
-#[derive(Derivative)]
+#[derive(Derivative, Display)]
 #[derivative(PartialEq, Debug)]
 pub enum RequestState {
     /// The initial state, nothing has been provided.
     Start,
 
     /// The server receives a connect request and generates a challenge.
+    #[display(fmt = "ConnectChallenge")]
     ConnectChallenge {
         #[derivative(Debug = "ignore")]
-        account: Account,
-        server: WowSRPServer,
+        login_handler: LoginHandler,
         #[derivative(Debug = "ignore")]
         response: ConnectChallenge,
     },
@@ -66,12 +66,14 @@ pub enum RequestState {
     // the server sends the challenge and gets a proof. this results
     // in either the authenticated or rejected states.
     /// The server has accepted the request.
+    #[display(fmt = "Authenticated")]
     Authenticated {
         #[derivative(Debug = "ignore")]
         response: ConnectProofResponse,
     },
 
     /// The server has rejected the request.
+    #[display(fmt = "Rejected")]
     Rejected {
         command: AuthCommand,
         reason: ReturnCode,
@@ -98,13 +100,14 @@ impl RequestState {
 
 /// Implements a WoW authentication server.
 #[derive(Debug)]
-pub struct AuthServer<T: AccountService + std::fmt::Debug> {
+pub struct AuthServer<T: AccountService + std::fmt::Debug, R: RealmList> {
     pub command_receiver: Receiver<Command>,
     pub reply_sender: Sender<ServerMessage>,
     pub accounts: T,
+    pub realms: R,
 }
 
-impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
+impl<T: AccountService + std::fmt::Debug, R: RealmList> AuthServer<T, R> {
     /// Start the server, handling requests on the provided host and port.
     #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
@@ -138,121 +141,30 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
             state = match state {
                 RequestState::Start => match read_packet(&mut reader).await {
                     Ok(Message::ConnectRequest(request)) => {
-                        let mut buffer = [0u8; 256];
-
-                        let username = {
-                            let username = &mut buffer[..request.identifier_length as usize];
-                            reader.read(username).await?;
-                            match str::from_utf8(username) {
-                                Ok(s) => s,
-                                Err(e) => {
-                                    error!("user connected with invalid username: {}", e);
-                                    state = RequestState::reject_from(&state, ReturnCode::Failed);
-                                    continue;
-                                }
-                            }
-                        };
-
-                        let state =
-                            match handle_connect_request(request, username, &self.accounts).await {
-                                Ok(s) => s,
-                                Err(reason) => {
-                                    state = RequestState::reject_from(&state, reason);
-                                    continue;
-                                }
-                            };
-
-                        if let RequestState::ConnectChallenge { response, .. } = &state {
-                            let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
-                            let len = bincode::options().serialized_size(&packet)? as usize;
-                            bincode::options().serialize_into(&mut buffer[..len], &packet)?;
-                            stream.write(&buffer[..len]).await?;
-                            stream.flush().await?;
-                        }
-
-                        state
+                        handle_connect_request(&request, &self.accounts, &state, stream).await?
                     }
-                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
+                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
                     Err(e) => return Err(e.into()),
                 },
                 RequestState::ConnectChallenge {
-                    ref account,
-                    server,
-                    ..
+                    ref login_handler, ..
                 } => match read_packet(&mut reader).await {
-                    Ok(Message::AuthLogonProof(p)) => {
-                        let state = match handle_connect_proof(p, server, &account).await {
-                            Ok(s) => s,
-                            Err(status) => {
-                                state = RequestState::reject_from(&state, status);
-                                continue;
-                            }
-                        };
-                        if let RequestState::Authenticated { response } = &state {
-                            let packet = ReplyPacket2 {
-                                command: AuthCommand::AuthLogonProof,
-                                message: *response,
-                            };
-                            let packet = bincode::serialize(&packet)?;
-
-                            debug!("sending packet: {:?}", &packet);
-
-                            stream.write(&packet).await?;
-                            stream.flush().await?;
-                        }
-
-                        state
+                    Ok(Message::ConnectProof(proof)) => {
+                        handle_connect_proof(&proof, login_handler, &state, stream).await?
                     }
-                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
+                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
                     Err(e) => return Err(e.into()),
                 },
                 RequestState::Authenticated { .. } => match read_packet(&mut reader).await {
-                    Ok(Message::RealmList(_r)) => {
-                        let realms = vec![Realm {
-                            realm_type: 0x01,
-                            locked: false,
-                            flags: 0x0,
-                            name: "Hi Mum".into(),
-                            socket: "51.178.64.97:8095".into(),
-                            pop_level: 0f32,
-                            character_count: 0,
-                            timezone: 8,
-                            realm_id: 1,
-                        }];
-
-                        let resp = RealmListResponse::from_realms(&realms)?;
-
-                        let mut packet = bincode::options()
-                            .with_fixint_encoding()
-                            .serialize(&(AuthCommand::RealmList, resp))?;
-
-                        for realm in realms {
-                            debug!("sending realm {:?}", realm);
-                            packet.append(
-                                &mut bincode::options()
-                                    .with_fixint_encoding()
-                                    .with_null_terminated_str_encoding()
-                                    .serialize(&realm)?,
-                            );
-                        }
-
-                        packet.push(0x10);
-                        packet.push(0x0);
-
-                        stream.write(&packet).await?;
-                        stream.flush().await?;
-
-                        RequestState::Done
-                    }
-                    Ok(p) => return Err(anyhow!("received invalid message {:?}", p)),
+                    Ok(Message::RealmList(_)) => handle_realmlist(&self.realms, stream).await?,
+                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
                     Err(e) => return Err(e.into()),
                 },
                 RequestState::Rejected { command, reason } => {
                     let mut buffer = [0u8; 2];
                     bincode::options().serialize_into(&mut buffer[..], &(command, reason))?;
-                    debug!("sending {:?}", buffer);
+                    info!("rejecting {} due to {}", command, reason);
                     stream.write(&buffer).await?;
-                    stream.flush().await?;
                     RequestState::Done
                 }
                 RequestState::Done => break,
@@ -265,76 +177,113 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
 
 #[instrument(skip(request, accounts))]
 async fn handle_connect_request(
-    request: ConnectRequest,
-    username: &str,
+    request: &ConnectRequest,
     accounts: &dyn AccountService,
-) -> Result<RequestState, ReturnCode> {
+    state: &RequestState,
+    stream: &mut TcpStream,
+) -> Result<RequestState> {
+    if request.build != 12340 {
+        return Ok(RequestState::reject_from(
+            &state,
+            ReturnCode::VersionInvalid,
+        ));
+    };
+
+    let mut buffer = [0u8; 16];
+    let username = {
+        let username = &mut buffer[..request.identifier_length as usize];
+        stream.read(username).await?;
+        match str::from_utf8(username) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("user connected with invalid username: {}", e);
+                return Ok(RequestState::reject_from(&state, ReturnCode::Failed));
+            }
+        }
+    };
+
     debug!("auth challenge for {}", username);
 
-    if request.build != 12340 {
-        return Err(ReturnCode::VersionInvalid);
-    };
-
-    let account = accounts.get_account(username).await.ok();
-    let account = match account {
-        Some(Account {
-            ban_status: Some(status),
-            username,
-            ..
-        }) => {
-            debug!("banned user {} attempted to log in", username);
-            return match status {
-                BanStatus::Temporary => Err(ReturnCode::Suspended),
-                BanStatus::Permanent => Err(ReturnCode::Banned),
-            };
-        }
-        Some(x) => x,
-        None => {
-            return Err(ReturnCode::UnknownAccount);
+    let state = match accounts
+        .initiate_login(username)
+        .await
+        .map(|login_handler| RequestState::ConnectChallenge {
+            response: ConnectChallenge::from_login_handler(&login_handler),
+            login_handler,
+        }) {
+        Ok(s) => s,
+        Err(reason) => {
+            return Ok(RequestState::reject_from(&state, reason.into()));
         }
     };
 
-    debug!("got user {:?}", account);
+    if let RequestState::ConnectChallenge { response, .. } = &state {
+        let mut buffer = [0u8; 256];
+        let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
+        let len = bincode::options().serialized_size(&packet)? as usize;
+        bincode::options().serialize_into(&mut buffer[..len], &packet)?;
+        stream.write(&buffer[..len]).await?;
+    }
 
-    let salt = Salt(account.salt);
-    let verifier = Verifier(account.verifier);
-    let server = WowSRPServer::new(&account.username, salt, verifier);
-
-    Ok(RequestState::ConnectChallenge {
-        response: ConnectChallenge {
-            server,
-            security_flags: 0,
-        },
-        server,
-        account,
-    })
+    Ok(state)
 }
 
-#[instrument(skip(proof, server, _account))]
+#[instrument(skip(proof, login_handler))]
 async fn handle_connect_proof(
-    proof: ConnectProof,
-    server: WowSRPServer,
-    _account: &Account,
-) -> Result<RequestState, ReturnCode> {
-    let session_key =
-        match server.verify_challenge_response(&proof.user_public_key, &proof.user_proof) {
-            Some(k) => k,
-            None => {
-                debug!("failed password");
-                return Err(ReturnCode::IncorrectPassword);
-            }
-        };
-
-    let server_proof =
-        server.get_server_proof(&proof.user_public_key, &proof.user_proof, &session_key);
-
-    let response = ConnectProofResponse {
-        error: 0,
-        server_proof,
-        account_flags: 0x00800000,
-        survey_id: 0,
-        login_flags: 0,
+    proof: &ConnectProof,
+    login_handler: &LoginHandler,
+    state: &RequestState,
+    stream: &mut TcpStream,
+) -> Result<RequestState> {
+    let state = match login_handler
+        .login(&proof.user_public_key, &proof.user_proof)
+        .await
+        .map(|server_proof| RequestState::Authenticated {
+            response: ConnectProofResponse {
+                error: 0,
+                server_proof,
+                account_flags: 0x00800000,
+                survey_id: 0,
+                login_flags: 0,
+            },
+        }) {
+        Ok(s) => s,
+        Err(status) => {
+            return Ok(RequestState::reject_from(&state, status.into()));
+        }
     };
+    if let RequestState::Authenticated { response } = &state {
+        stream
+            .write(&bincode::serialize(&ReplyPacket2 {
+                command: AuthCommand::AuthLogonProof,
+                message: *response,
+            })?)
+            .await?;
+    }
+    Ok(state)
+}
 
-    Ok(RequestState::Authenticated { response })
+async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Result<RequestState> {
+    let realms = realms
+        .realms()
+        .await
+        .iter()
+        .map(|r| Realm::from_realm(&r, 0, false))
+        .collect::<Vec<_>>();
+
+    let resp = RealmListResponse::from_realms(&realms)?;
+    let mut packet = Vec::with_capacity((resp.packet_size + 8).into());
+    packet.append(&mut bincode::serialize(&(AuthCommand::RealmList, resp))?);
+    for realm in realms {
+        packet.append(
+            &mut bincode::options()
+                .with_fixint_encoding()
+                .with_null_terminated_str_encoding()
+                .serialize(&realm)?,
+        );
+    }
+    packet.extend_from_slice(&[0x10, 0x0]);
+
+    stream.write(&packet).await?;
+    Ok(RequestState::Done)
 }

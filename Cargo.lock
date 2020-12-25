@@ -268,6 +268,7 @@ dependencies = [
  "colored",
  "derivative",
  "derive_more",
+ "enumflags2",
  "game",
  "human-panic",
  "lazy_static",
@@ -649,6 +650,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "enumflags2"
+version = "0.7.0-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77412c73a0e3e019fb4ab1f1c74d0946a4b6099bb64b527782fc6cb2ae848c3a"
+dependencies = [
+ "enumflags2_derive",
+]
+
+[[package]]
+name = "enumflags2_derive"
+version = "0.7.0-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ed5f7f23e9c3e38bbadae757d69d2b91cdc1234f126e6215877300499e0a125"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.7",
+ "syn 1.0.54",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -818,10 +839,14 @@ dependencies = [
 name = "game"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "async-trait",
  "derive_more",
+ "enumflags2",
+ "num_enum",
  "sqlx",
  "thiserror",
+ "wow-srp",
 ]
 
 [[package]]
@@ -1120,6 +1145,7 @@ dependencies = [
 name = "mysql"
 version = "0.1.0"
 dependencies = [
+ "async-std",
  "async-trait",
  "game",
  "lazy_static",

@@ -1,6 +1,8 @@
 use async_trait::async_trait;
-use game::accounts::{Account, AccountId, AccountOpError};
-use tracing::instrument;
+use game::accounts::{
+    Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginHandler,
+};
+use tracing::{debug, instrument};
 use wow_srp::WowSRPServer;
 
 #[derive(Debug)]
@@ -17,7 +19,7 @@ impl MySQLAccountService {
 }
 
 #[async_trait]
-impl game::accounts::AccountService for MySQLAccountService {
+impl AccountService for MySQLAccountService {
     #[instrument(skip(self))]
     async fn create_account(
         &self,
@@ -96,5 +98,27 @@ impl game::accounts::AccountService for MySQLAccountService {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| AccountOpError::PersistError(e.to_string()))
+    }
+
+    async fn initiate_login(&self, username: &str) -> Result<LoginHandler, LoginFailure> {
+        let account = self.get_account(username).await.ok();
+        let account = match account {
+            Some(Account {
+                ban_status: Some(status),
+                username,
+                ..
+            }) => {
+                debug!("banned user {} attempted to log in", username);
+                return match status {
+                    BanStatus::Temporary => Err(LoginFailure::Suspended),
+                    BanStatus::Permanent => Err(LoginFailure::Banned),
+                };
+            }
+            Some(x) => x,
+            None => {
+                return Err(LoginFailure::UnknownAccount);
+            }
+        };
+        Ok(account.into())
     }
 }

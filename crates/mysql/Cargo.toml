@@ -13,3 +13,4 @@ wow-srp = { path = "../wow-srp" }
 game = { path = "../game" }
 lazy_static = "1.4.0"
 rand = "0.8.0"
+async-std = "1.8.0"

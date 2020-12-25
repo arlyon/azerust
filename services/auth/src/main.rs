@@ -13,7 +13,7 @@
     clippy::unimplemented
 )]
 
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::Result;
 use human_panic::setup_panic;
@@ -26,7 +26,7 @@ use crate::{
 };
 use conf::AuthServerConfig;
 use game::accounts::AccountService;
-use mysql::accounts::MySQLAccountService;
+use mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
 
 mod authserver;
 mod conf;
@@ -102,11 +102,14 @@ async fn start_server<U: 'static + UI + Send>(
     // });
 
     let accounts = MySQLAccountService::new("mysql://localhost:49153/auth").await?;
+    let realms =
+        MySQLRealmList::new("mysql://localhost:49153/auth", Duration::from_secs(60)).await?;
 
     AuthServer {
         command_receiver,
         reply_sender,
         accounts,
+        realms,
     }
     .start(config.bind_address, config.port)
     .await

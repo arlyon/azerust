@@ -12,14 +12,19 @@ pub mod packets;
 
 /// The various messages that we can receive from the client.
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum Message {
+    #[display(fmt = "ConnectRequest")]
     ConnectRequest(ConnectRequest) = 0x00,
-    AuthLogonProof(ConnectProof) = 0x01,
+    #[display(fmt = "AuthLogonProof")]
+    ConnectProof(ConnectProof) = 0x01,
 
-    AuthReconnectChallenge(ConnectRequest) = 0x02,
-    AuthReconnectProof(ReconnectProof) = 0x03,
+    #[display(fmt = "ReconnectRequest")]
+    ReconnectRequest(ConnectRequest) = 0x02,
+    #[display(fmt = "ReconnectProof")]
+    ReconnectProof(ReconnectProof) = 0x03,
 
+    #[display(fmt = "RealmList")]
     RealmList(RealmListRequest) = 0x10,
 }
 
@@ -36,13 +41,13 @@ impl TryFrom<&[u8]> for Message {
                     .map(Message::ConnectRequest)
                     .map_err(Into::into),
                 AuthCommand::AuthLogonProof => bincode::deserialize(data)
-                    .map(Message::AuthLogonProof)
+                    .map(Message::ConnectProof)
                     .map_err(Into::into),
                 AuthCommand::AuthReconnectChallenge => bincode::deserialize(data)
-                    .map(Message::AuthReconnectChallenge)
+                    .map(Message::ReconnectRequest)
                     .map_err(Into::into),
                 AuthCommand::AuthReconnectProof => bincode::deserialize(data)
-                    .map(Message::AuthReconnectProof)
+                    .map(Message::ReconnectProof)
                     .map_err(Into::into),
                 AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
                 _ => Err(MessageParseError::InvalidCommand(command)),
@@ -85,13 +90,13 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
             .map(Message::ConnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthLogonProof => bincode::deserialize(&buffer[..])
-            .map(Message::AuthLogonProof)
+            .map(Message::ConnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthReconnectChallenge => bincode::deserialize(&buffer[..])
-            .map(Message::AuthReconnectChallenge)
+            .map(Message::ReconnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
-            .map(Message::AuthReconnectProof)
+            .map(Message::ReconnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         _ => Err(PacketHandleError::UnsupportedCommand(command)),
     }
