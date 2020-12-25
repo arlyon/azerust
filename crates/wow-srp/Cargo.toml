@@ -12,3 +12,4 @@ rand_derive = "0.5.0"
 serde = { version = "1.0.118", features = ["derive"] }
 sha-1 = "0.9.2"
 sqlx = { version = "0.4.2", path = "../../../sqlx" }
+tracing = "0.1.22"

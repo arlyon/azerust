@@ -27,6 +27,7 @@ use rand::{
 use serde::Serialize;
 use sha1::{Digest, Sha1};
 use sqlx::Type;
+use tracing::instrument;
 
 lazy_static! {
     static ref G: BigUint = BigUint::from_bytes_be(&[7]);
@@ -96,6 +97,8 @@ impl Verifier {
 /// SRP protocol.
 ///
 /// ```rust
+/// use wow_srp::WowSRPServer;
+///
 /// // register a new user
 /// let (verifier, salt) = WowSRPServer::register("ARLYON", "TEST");
 ///
@@ -176,6 +179,7 @@ impl WowSRPServer {
 
     /// Verify the challenge response, returning a verified key if
     /// it is valid.
+    #[instrument]
     pub fn verify_challenge_response(
         self,
         a_pub: &[u8; 32],
@@ -296,30 +300,28 @@ mod test {
     #[test]
     pub fn test_challenge_response() {
         let a_pub: [u8; 32] = [
-            161, 6, 45, 226, 95, 140, 75, 203, 143, 102, 171, 182, 96, 203, 237, 67, 17, 103, 16,
-            227, 227, 142, 50, 15, 13, 77, 41, 161, 5, 167, 206, 21,
+            177, 187, 117, 101, 30, 135, 85, 86, 180, 130, 85, 39, 48, 20, 11, 106, 214, 92, 84,
+            103, 232, 177, 228, 146, 224, 172, 207, 133, 107, 59, 208, 18,
         ];
 
         let client_m: [u8; 20] = [
-            79, 160, 38, 217, 3, 168, 13, 96, 14, 75, 198, 236, 162, 247, 255, 220, 89, 145, 220,
-            68,
+            146, 204, 135, 140, 185, 242, 195, 134, 82, 178, 161, 241, 103, 186, 206, 104, 255,
+            211, 141, 6,
         ];
 
         let server = WowSRPServer::new(
             &"ARLYON",
             Salt([
-                187, 90, 185, 129, 207, 201, 1, 39, 118, 43, 185, 47, 102, 19, 75, 54, 17, 102,
-                255, 182, 144, 248, 239, 202, 238, 158, 71, 164, 216, 195, 53, 226,
+                224, 222, 178, 127, 204, 184, 244, 126, 70, 90, 69, 35, 84, 22, 9, 131, 253, 198,
+                54, 56, 240, 56, 90, 214, 234, 20, 89, 54, 177, 3, 71, 245,
             ]),
             Verifier::from_raw([
-                44, 42, 171, 164, 129, 208, 59, 156, 50, 148, 246, 223, 12, 222, 85, 21, 129, 251,
-                36, 170, 7, 130, 79, 109, 238, 227, 72, 88, 196, 33, 67, 90,
+                83, 39, 153, 164, 62, 235, 129, 78, 56, 219, 154, 148, 34, 246, 103, 86, 198, 149,
+                125, 69, 184, 96, 172, 156, 203, 86, 185, 27, 161, 55, 61, 8,
             ]),
         );
 
-        assert!(server
-            .verify_challenge_response(&a_pub, &client_m)
-            .is_some())
+        server.verify_challenge_response(&a_pub, &client_m).unwrap();
     }
 
     #[test]
