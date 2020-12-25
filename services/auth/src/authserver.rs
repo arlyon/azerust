@@ -4,7 +4,7 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use std::{convert::TryFrom, net::Ipv4Addr};
+use std::{convert::TryFrom, net::Ipv4Addr, str};
 
 use anyhow::{anyhow, Context, Result};
 use bincode::Options;
@@ -72,12 +72,27 @@ pub enum RequestState {
 
     /// The server has rejected the request.
     Rejected {
-        stage: AuthCommand,
-        status: ReturnCode,
+        command: AuthCommand,
+        reason: ReturnCode,
     },
 
     /// We are done with the request.
     Done,
+}
+
+impl RequestState {
+    fn reject_from(state: Self, reason: ReturnCode) -> Self {
+        Self::Rejected {
+            command: match state {
+                RequestState::Start => AuthCommand::ConnectRequest,
+                RequestState::ConnectChallenge { .. } => AuthCommand::AuthLogonProof,
+                RequestState::Authenticated { .. } => AuthCommand::RealmList,
+                RequestState::Rejected { command, .. } => command,
+                RequestState::Done => AuthCommand::RealmList,
+            },
+            reason,
+        }
+    }
 }
 
 /// Implements a WoW authentication server.
@@ -121,32 +136,35 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
             debug!("handling state {:?}", state);
             state = match state {
                 RequestState::Start => match read_packet(&mut reader).await {
-                    Ok(Message::ConnectRequest(c)) => {
+                    Ok(Message::ConnectRequest(request)) => {
                         let mut buffer = [0u8; 256];
-                        let username = {
-                            let username = &mut buffer[..c.identifier_length as usize];
-                            reader.read(username).await?;
-                            std::str::from_utf8(username).expect("valid")
-                        };
 
-                        let state = match handle_logon_request(c, username, &self.accounts).await {
-                            Ok(s) => s,
-                            Err(status) => {
-                                state = RequestState::Rejected {
-                                    stage: AuthCommand::ConnectRequest,
-                                    status,
-                                };
-                                continue;
+                        let username = {
+                            let username = &mut buffer[..request.identifier_length as usize];
+                            reader.read(username).await?;
+                            match str::from_utf8(username) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    error!("user connected with invalid username: {}", e);
+                                    state = RequestState::reject_from(state, ReturnCode::Failed);
+                                    continue;
+                                }
                             }
                         };
+
+                        let state =
+                            match handle_connect_request(request, username, &self.accounts).await {
+                                Ok(s) => s,
+                                Err(reason) => {
+                                    state = RequestState::reject_from(state, reason);
+                                    continue;
+                                }
+                            };
 
                         if let RequestState::ConnectChallenge { response, .. } = &state {
                             let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
                             let len = bincode::options().serialized_size(&packet)? as usize;
                             bincode::options().serialize_into(&mut buffer[..len], &packet)?;
-
-                            debug!("packet: {:02X?}", &buffer[..len]);
-
                             stream.write(&buffer[..len]).await?;
                             stream.flush().await?;
                         }
@@ -154,8 +172,8 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                         state
                     }
                     Err(_e) => RequestState::Rejected {
-                        stage: AuthCommand::ConnectRequest,
-                        status: ReturnCode::Failed,
+                        command: AuthCommand::ConnectRequest,
+                        reason: ReturnCode::Failed,
                     },
                     _ => return Err(anyhow!("invalid state")),
                 },
@@ -167,8 +185,8 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                             Ok(s) => s,
                             Err(status) => {
                                 state = RequestState::Rejected {
-                                    stage: AuthCommand::AuthLogonProof,
-                                    status,
+                                    command: AuthCommand::AuthLogonProof,
+                                    reason: status,
                                 };
                                 continue;
                             }
@@ -232,7 +250,10 @@ impl<T: AccountService + std::fmt::Debug> AuthServer<T> {
                     Err(e) => return Err(e.into()),
                     _ => return Err(anyhow!("invalid state")),
                 },
-                RequestState::Rejected { stage, status } => {
+                RequestState::Rejected {
+                    command: stage,
+                    reason: status,
+                } => {
                     let mut buffer = [0u8; 2];
                     bincode::options().serialize_into(&mut buffer[..], &(stage, status))?;
                     debug!("sending {:?}", buffer);
@@ -294,7 +315,7 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
 }
 
 #[instrument(skip(request, accounts))]
-async fn handle_logon_request(
+async fn handle_connect_request(
     request: ConnectRequest,
     username: &str,
     accounts: &dyn AccountService,
