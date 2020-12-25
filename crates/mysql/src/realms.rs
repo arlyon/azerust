@@ -1,5 +1,5 @@
+use async_std::{prelude::FutureExt, sync::RwLock};
 use std::time::{Duration, SystemTime};
-use async_std::{sync::RwLock, prelude::FutureExt};
 
 use async_trait::async_trait;
 use game::realms::{Realm, RealmList};
@@ -12,7 +12,7 @@ pub struct MySQLRealmList {
 }
 
 impl MySQLRealmList {
-     pub async fn new(connect: &str, update_interval: Duration) -> Result<Self, sqlx::Error> {
+    pub async fn new(connect: &str, update_interval: Duration) -> Result<Self, sqlx::Error> {
         Ok(Self {
             pool: sqlx::MySqlPool::connect(connect).await?,
             update_interval,

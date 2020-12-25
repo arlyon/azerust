@@ -1,7 +1,7 @@
 use assert_size_attribute::assert_eq_size;
 use bincode::Options;
 use derive_more::Display;
-use game::accounts::{LoginFailure, LoginHandler};
+use game::accounts::{LoginFailure, LoginVerifier};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use thiserror::Error;
@@ -110,7 +110,7 @@ pub struct ConnectChallenge {
 }
 
 impl ConnectChallenge {
-    pub fn from_login_handler(handler: &LoginHandler) -> Self {
+    pub fn from_login_handler(handler: &dyn LoginVerifier) -> Self {
         Self {
             b_pub: *handler.get_b_pub(),
             g: handler.get_g(),
@@ -319,6 +319,7 @@ pub struct ReplyPacket2 {
 #[cfg(test)]
 mod test {
     use game::accounts::{Account, AccountId};
+    use mysql::accounts::MySQLLoginVerifier;
     use test_case::test_case;
 
     use bincode::Options;
@@ -436,7 +437,7 @@ mod test {
             ban_status: None,
         };
 
-        let message = ConnectChallenge::from_login_handler(&account.into());
+        let message = ConnectChallenge::from_login_handler(&MySQLLoginVerifier::from(account));
         assert_eq!(&bincode::options().serialize(&message).unwrap(), &data)
     }
 

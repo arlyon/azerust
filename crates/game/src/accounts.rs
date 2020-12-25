@@ -1,9 +1,8 @@
-use arrayvec::ArrayString;
 use async_trait::async_trait;
 use derive_more::Display;
 use sqlx::Type;
 use thiserror::Error;
-use wow_srp::{Salt, Verifier, WowSRPServer};
+use wow_srp::{Salt, Verifier};
 
 #[derive(Debug, Display, PartialEq, Type, Clone, Copy)]
 #[sqlx(transparent)]
@@ -32,54 +31,26 @@ pub enum AccountOpError {
     InvalidAccount(AccountId),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct LoginHandler(WowSRPServer);
-
-impl From<Account> for LoginHandler {
-    fn from(account: Account) -> Self {
-        Self(WowSRPServer::new(
-            &account.username,
-            account.salt,
-            account.verifier,
-        ))
-    }
-}
-
-impl LoginHandler {
+#[async_trait]
+pub trait LoginVerifier {
     /// Get the g parameter in use by this server.
-    pub fn get_g(&self) -> Vec<u8> {
-        self.0.get_g()
-    }
+    fn get_g(&self) -> Vec<u8>;
 
     /// Get the n parameter in use by this server.
-    pub fn get_n(&self) -> Vec<u8> {
-        self.0.get_n()
-    }
+    fn get_n(&self) -> Vec<u8>;
 
     /// Get the random salt in use by this server.
-    pub fn get_salt(&self) -> &Salt {
-        self.0.get_salt()
-    }
-
+    fn get_salt(&self) -> &Salt;
     /// Get the ephemeral public key for this server.
-    pub fn get_b_pub(&self) -> &[u8; 32] {
-        self.0.get_b_pub()
-    }
+    fn get_b_pub(&self) -> &[u8; 32];
 
-    pub fn get_security_flags(&self) -> u8 {
-        0x0
-    }
+    fn get_security_flags(&self) -> u8;
 
-    pub async fn login(
+    async fn login(
         &self,
         public_key: &[u8; 32],
         proof: &[u8; 20],
-    ) -> Result<[u8; 20], LoginFailure> {
-        self.0
-            .verify_challenge_response(public_key, proof)
-            .map(|session_key| self.0.get_server_proof(public_key, proof, &session_key))
-            .ok_or(LoginFailure::IncorrectPassword)
-    }
+    ) -> Result<[u8; 20], LoginFailure>;
 }
 
 pub enum LoginFailure {
@@ -90,22 +61,18 @@ pub enum LoginFailure {
 }
 
 /// An account service handles all the business logic for accounts.
-///
-/// todo(arlyon): Push the login protocol into a 'login handler'.
 #[async_trait]
-pub trait AccountService {
+pub trait AccountService<H: LoginVerifier> {
     async fn create_account(
         &self,
         username: &str,
         password: &str,
         email: &str,
     ) -> Result<AccountId, AccountOpError>;
+
     async fn delete_account(&self, id: AccountId) -> Result<(), AccountOpError>;
+
     async fn get_account(&self, username: &str) -> Result<Account, AccountOpError>;
 
-    async fn get_id(&self, username: &str) -> Result<AccountId, AccountOpError> {
-        self.get_account(username).await.map(|acc| acc.id)
-    }
-
-    async fn initiate_login(&self, username: &str) -> Result<LoginHandler, LoginFailure>;
+    async fn initiate_login(&self, username: &str) -> Result<H, LoginFailure>;
 }

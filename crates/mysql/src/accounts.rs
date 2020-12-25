@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use game::accounts::{
-    Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginHandler,
+    Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginVerifier,
 };
 use tracing::{debug, instrument};
-use wow_srp::WowSRPServer;
+use wow_srp::{Salt, WowSRPServer};
 
 #[derive(Debug)]
 pub struct MySQLAccountService {
@@ -18,8 +18,59 @@ impl MySQLAccountService {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MySQLLoginVerifier(WowSRPServer);
+
+impl From<Account> for MySQLLoginVerifier {
+    fn from(account: Account) -> Self {
+        Self(WowSRPServer::new(
+            &account.username,
+            account.salt,
+            account.verifier,
+        ))
+    }
+}
+
 #[async_trait]
-impl AccountService for MySQLAccountService {
+impl LoginVerifier for MySQLLoginVerifier {
+    /// Get the g parameter in use by this server.
+    fn get_g(&self) -> Vec<u8> {
+        self.0.get_g()
+    }
+
+    /// Get the n parameter in use by this server.
+    fn get_n(&self) -> Vec<u8> {
+        self.0.get_n()
+    }
+
+    /// Get the random salt in use by this server.
+    fn get_salt(&self) -> &Salt {
+        self.0.get_salt()
+    }
+
+    /// Get the ephemeral public key for this server.
+    fn get_b_pub(&self) -> &[u8; 32] {
+        self.0.get_b_pub()
+    }
+
+    fn get_security_flags(&self) -> u8 {
+        0x0
+    }
+
+    async fn login(
+        &self,
+        public_key: &[u8; 32],
+        proof: &[u8; 20],
+    ) -> Result<[u8; 20], LoginFailure> {
+        self.0
+            .verify_challenge_response(public_key, proof)
+            .map(|session_key| self.0.get_server_proof(public_key, proof, &session_key))
+            .ok_or(LoginFailure::IncorrectPassword)
+    }
+}
+
+#[async_trait]
+impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
     #[instrument(skip(self))]
     async fn create_account(
         &self,
@@ -100,7 +151,7 @@ impl AccountService for MySQLAccountService {
         .map_err(|e| AccountOpError::PersistError(e.to_string()))
     }
 
-    async fn initiate_login(&self, username: &str) -> Result<LoginHandler, LoginFailure> {
+    async fn initiate_login(&self, username: &str) -> Result<MySQLLoginVerifier, LoginFailure> {
         let account = self.get_account(username).await.ok();
         let account = match account {
             Some(Account {

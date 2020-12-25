@@ -4,14 +4,14 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use std::{net::Ipv4Addr, str};
+use std::{fmt, marker::PhantomData, net::Ipv4Addr, str};
 
 use anyhow::{anyhow, Context, Result};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
 use game::{
-    accounts::{AccountService, LoginHandler},
+    accounts::{AccountService, LoginVerifier},
     realms::RealmList,
 };
 use tracing::{debug, error, info, instrument};
@@ -50,7 +50,7 @@ pub enum Command {
 /// Models the various valid states of the server.
 #[derive(Derivative, Display)]
 #[derivative(PartialEq, Debug)]
-pub enum RequestState {
+pub enum RequestState<H: LoginVerifier> {
     /// The initial state, nothing has been provided.
     Start,
 
@@ -58,7 +58,7 @@ pub enum RequestState {
     #[display(fmt = "ConnectChallenge")]
     ConnectChallenge {
         #[derivative(Debug = "ignore")]
-        login_handler: LoginHandler,
+        login_handler: H,
         #[derivative(Debug = "ignore")]
         response: ConnectChallenge,
     },
@@ -83,7 +83,7 @@ pub enum RequestState {
     Done,
 }
 
-impl RequestState {
+impl<H: LoginVerifier> RequestState<H> {
     fn reject_from(state: &Self, reason: ReturnCode) -> Self {
         Self::Rejected {
             command: match state {
@@ -100,14 +100,30 @@ impl RequestState {
 
 /// Implements a WoW authentication server.
 #[derive(Debug)]
-pub struct AuthServer<T: AccountService + std::fmt::Debug, R: RealmList> {
+pub struct AuthServer<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> {
     pub command_receiver: Receiver<Command>,
     pub reply_sender: Sender<ServerMessage>,
     pub accounts: T,
     pub realms: R,
+    pub phantom_data: PhantomData<H>,
 }
 
-impl<T: AccountService + std::fmt::Debug, R: RealmList> AuthServer<T, R> {
+impl<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> AuthServer<H, T, R> {
+    pub fn new(
+        command_receiver: Receiver<Command>,
+        reply_sender: Sender<ServerMessage>,
+        accounts: T,
+        realms: R,
+    ) -> Self {
+        Self {
+            command_receiver,
+            reply_sender,
+            accounts,
+            realms,
+            phantom_data: PhantomData,
+        }
+    }
+
     /// Start the server, handling requests on the provided host and port.
     #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
@@ -176,12 +192,12 @@ impl<T: AccountService + std::fmt::Debug, R: RealmList> AuthServer<T, R> {
 }
 
 #[instrument(skip(request, accounts))]
-async fn handle_connect_request(
+async fn handle_connect_request<H: LoginVerifier>(
     request: &ConnectRequest,
-    accounts: &dyn AccountService,
-    state: &RequestState,
+    accounts: &dyn AccountService<H>,
+    state: &RequestState<H>,
     stream: &mut TcpStream,
-) -> Result<RequestState> {
+) -> Result<RequestState<H>> {
     if request.build != 12340 {
         return Ok(RequestState::reject_from(
             &state,
@@ -229,12 +245,12 @@ async fn handle_connect_request(
 }
 
 #[instrument(skip(proof, login_handler))]
-async fn handle_connect_proof(
+async fn handle_connect_proof<H: LoginVerifier>(
     proof: &ConnectProof,
-    login_handler: &LoginHandler,
-    state: &RequestState,
+    login_handler: &H,
+    state: &RequestState<H>,
     stream: &mut TcpStream,
-) -> Result<RequestState> {
+) -> Result<RequestState<H>> {
     let state = match login_handler
         .login(&proof.user_public_key, &proof.user_proof)
         .await
@@ -263,7 +279,10 @@ async fn handle_connect_proof(
     Ok(state)
 }
 
-async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Result<RequestState> {
+async fn handle_realmlist<H: LoginVerifier>(
+    realms: &dyn RealmList,
+    stream: &mut TcpStream,
+) -> Result<RequestState<H>> {
     let realms = realms
         .realms()
         .await
