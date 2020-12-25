@@ -5,7 +5,7 @@ authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
 
 [dependencies]
-sqlx = { version = "0.4.2", features = ["mysql"], path = "../../../sqlx" }
+sqlx = { version = "0.4.2", features = ["mysql"], git = "https://github.com/arlyon/sqlx.git" }
 tracing = "0.1.22"
 tracing-futures = "0.2.4"
 async-trait = "0.1.42"

@@ -7,9 +7,9 @@ edition = "2018"
 [dependencies]
 async-std = { version = "1.8.0", features = ["unstable", "async-channel", "attributes"] }
 async-trait = "0.1.42"
-sqlx = { version = "0.4.2", features = ["runtime-async-std-rustls", "mysql", "offline"], path = "../../../sqlx" }
+sqlx = { version = "0.4.2", features = ["runtime-async-std-rustls", "mysql", "offline"], git = "https://github.com/arlyon/sqlx.git" }
 
-bincode = { version = "1.3.1", path = "../../../bincode" }
+bincode = { version = "1.3.1", git = "https://github.com/arlyon/bincode.git", branch = "arlyon/null-str-encoding" }
 serde = { version = "1.0.118", features = ["derive"] }
 serde_yaml = "0.8.14"
 
@@ -36,7 +36,7 @@ tracing-futures = "0.2.4"
 colored = "2.0.0"
 termion = "1.5.5"
 tui = "0.13.0"
-tui-logger = { version = "0.4.8", path = "../../../tui-logger" }
+tui-logger = { version = "0.4.8" }
 
 wow-srp = { path = "../../crates/wow-srp" }
 game = { path = "../../crates/game" }

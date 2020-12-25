@@ -288,7 +288,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "tracing-subscriber",
- "tui",
+ "tui 0.13.0",
  "tui-logger",
  "wow-srp",
 ]
@@ -334,6 +334,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "bincode"
 version = "1.3.1"
+source = "git+https://github.com/arlyon/bincode.git?branch=arlyon/null-str-encoding#9fbd4b64a9fdd4ec1300e011ba4b1b86064e6a50"
 dependencies = [
  "byteorder",
  "serde",
@@ -2026,6 +2027,7 @@ dependencies = [
 [[package]]
 name = "sqlx"
 version = "0.4.2"
+source = "git+https://github.com/arlyon/sqlx.git#ed47b96badf6af13266376b1feba12f9454d1c61"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -2034,6 +2036,7 @@ dependencies = [
 [[package]]
 name = "sqlx-core"
 version = "0.4.2"
+source = "git+https://github.com/arlyon/sqlx.git#ed47b96badf6af13266376b1feba12f9454d1c61"
 dependencies = [
  "ahash 0.6.2",
  "atoi",
@@ -2081,6 +2084,7 @@ dependencies = [
 [[package]]
 name = "sqlx-macros"
 version = "0.4.2"
+source = "git+https://github.com/arlyon/sqlx.git#ed47b96badf6af13266376b1feba12f9454d1c61"
 dependencies = [
  "cargo_metadata",
  "dotenv",
@@ -2103,6 +2107,7 @@ dependencies = [
 [[package]]
 name = "sqlx-rt"
 version = "0.2.0"
+source = "git+https://github.com/arlyon/sqlx.git#ed47b96badf6af13266376b1feba12f9454d1c61"
 dependencies = [
  "async-rustls",
  "async-std",
@@ -2420,6 +2425,19 @@ dependencies = [
 
 [[package]]
 name = "tui"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2eaeee894a1e9b90f80aa466fe59154fdb471980b5e104d8836fcea309ae17e"
+dependencies = [
+ "bitflags",
+ "cassowary",
+ "termion",
+ "unicode-segmentation",
+ "unicode-width",
+]
+
+[[package]]
+name = "tui"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d4e6c82bb967df89f20b875fa8835fab5d5622c6a5efa574a1f0b6d0aa6e8f6"
@@ -2434,6 +2452,8 @@ dependencies = [
 [[package]]
 name = "tui-logger"
 version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc80d8b8ef19522ac60474ce2a36e7c86cf290abb9ca5159f2df1f94c42f0d69"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2442,7 +2462,7 @@ dependencies = [
  "parking_lot",
  "slog",
  "termion",
- "tui",
+ "tui 0.12.0",
 ]
 
 [[package]]

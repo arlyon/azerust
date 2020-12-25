@@ -2,7 +2,8 @@
 
 Azerust is an experimental WoW server emulator for patch 3.3.5
 written in Rust. Currently, it only implements the auth server.
-Our goals are:
+It is currently being built to be compatible (read: piggy back
+on top of) the TrinityCore database. Our goals are:
 
 - fast
 - readable
