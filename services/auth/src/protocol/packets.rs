@@ -312,13 +312,6 @@ impl ReplyPacket<()> {
     }
 }
 
-#[repr(C, packed(1))]
-#[derive(Serialize, Copy, Clone)]
-pub struct ReplyPacket2 {
-    pub command: AuthCommand,
-    pub message: ConnectProofResponse,
-}
-
 #[cfg(test)]
 mod test {
     use game::accounts::{Account, AccountId};
@@ -330,7 +323,7 @@ mod test {
 
     use super::{
         AuthCommand, ConnectChallenge, ConnectProofResponse, Realm, RealmListResponse, ReplyPacket,
-        ReplyPacket2, ReturnCode,
+        ReturnCode,
     };
 
     #[test]
@@ -462,9 +455,9 @@ mod test {
             244, 140, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0,
         ];
 
-        let response = ReplyPacket2 {
-            command: AuthCommand::AuthLogonProof,
-            message: ConnectProofResponse {
+        let response = (
+             AuthCommand::AuthLogonProof,
+             ConnectProofResponse {
                 error: 0,
                 server_proof: [
                     177, 50, 224, 237, 37, 4, 196, 159, 100, 31, 30, 14, 198, 45, 137, 158, 228,
@@ -474,7 +467,7 @@ mod test {
                 survey_id: 0x0,
                 login_flags: 0x0,
             },
-        };
+        );
 
         assert_eq!(bincode::serialize(&response).unwrap(), &data)
     }

@@ -19,8 +19,7 @@ use tracing::{debug, error, info, instrument};
 use crate::protocol::{
     packets::{
         AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
-        RealmListResponse, ReconnectProof, ReplyPacket, ReplyPacket2, ReturnCode,
-        VERSION_CHALLENGE,
+        RealmListResponse, ReconnectProof, ReplyPacket, ReturnCode, VERSION_CHALLENGE,
     },
     read_packet, Message,
 };
@@ -217,12 +216,8 @@ async fn handle_connect_request(
 
     debug!("auth challenge for {}", username);
 
-    let (state, response) = match accounts
-        .initiate_login(username)
-        .await
-        .map(|token| (RequestState::ConnectChallenge { token }, token.into()))
-    {
-        Ok(s) => s,
+    let (state, response) = match accounts.initiate_login(username).await {
+        Ok(token) => (RequestState::ConnectChallenge { token }, token.into()),
         Err(reason) => {
             return Ok(RequestState::reject_from(&state, reason.into()));
         }
@@ -248,29 +243,27 @@ async fn handle_connect_proof(
     let (state, response) = match accounts
         .complete_login(token, &proof.user_public_key, &proof.user_proof)
         .await
-        .map(|server_proof| {
-            (
-                RequestState::Realmlist,
-                ConnectProofResponse {
-                    error: 0,
-                    server_proof,
-                    account_flags: 0x00800000,
-                    survey_id: 0,
-                    login_flags: 0,
-                },
-            )
-        }) {
-        Ok(s) => s,
+    {
+        Ok(server_proof) => (
+            RequestState::Realmlist,
+            ConnectProofResponse {
+                error: 0,
+                server_proof,
+                account_flags: 0x00800000,
+                survey_id: 0,
+                login_flags: 0,
+            },
+        ),
         Err(status) => {
             return Ok(RequestState::reject_from(&state, status.into()));
         }
     };
 
     stream
-        .write(&bincode::serialize(&ReplyPacket2 {
-            command: AuthCommand::AuthLogonProof,
-            message: response,
-        })?)
+        .write(&bincode::serialize(&(
+            AuthCommand::AuthLogonProof,
+            response,
+        ))?)
         .await?;
 
     Ok(state)
@@ -331,34 +324,18 @@ async fn handle_reconnect_proof(
     let (state, response) = match accounts
         .complete_relogin(token, &proof.proof_data, &proof.client_proof)
         .await
-        .map(|server_proof| {
-            (
-                RequestState::Realmlist,
-                ConnectProofResponse {
-                    error: 0,
-                    server_proof,
-                    account_flags: 0x00800000,
-                    survey_id: 0,
-                    login_flags: 0,
-                },
-            )
-        }) {
-        Ok(s) => s,
+    {
+        Ok(_) => (
+            RequestState::Realmlist,
+            (AuthCommand::AuthReconnectProof, ReturnCode::Success, 0u16),
+        ),
         Err(status) => {
             return Ok(RequestState::reject_from(&state, status.into()));
         }
     };
 
     debug!("user has reauthenticated");
-
-    stream
-        .write(&bincode::serialize(&(
-            AuthCommand::AuthReconnectProof,
-            ReturnCode::Success,
-            0u16,
-        ))?)
-        .await?;
-
+    stream.write(&bincode::serialize(&response)?).await?;
     Ok(state)
 }
 
