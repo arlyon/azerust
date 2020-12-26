@@ -1,10 +1,10 @@
 #![feature(arbitrary_enum_discriminant)]
+#![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
-    unsafe_code,
     unused_import_braces,
     unused_qualifications,
     clippy::useless_conversion,

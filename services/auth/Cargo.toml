@@ -3,6 +3,7 @@ name = "auth"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 async-std = { version = "1.8.0", features = ["unstable", "async-channel", "attributes"] }
@@ -27,7 +28,7 @@ assert-size-attribute = { path = "../../crates/assert-size-attribute" }
 structopt = "0.3.21"
 rand = "0.8.0"
 lazy_static = "1.4.0"
-num-bigint = "0.2"
+num-bigint = "0.3.1"
 
 tracing = "0.1.22"
 tracing-subscriber = { version = "0.2.15", features = ["tracing-log"] }
@@ -36,7 +37,6 @@ tracing-futures = "0.2.4"
 colored = "2.0.0"
 termion = "1.5.5"
 tui = "0.13.0"
-tui-logger = { version = "0.4.8" }
 
 wow-srp = { path = "../../crates/wow-srp" }
 game = { path = "../../crates/game" }
