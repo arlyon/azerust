@@ -3,6 +3,7 @@ name = "mysql"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 sqlx = { version = "0.4.2", features = ["mysql"], git = "https://github.com/arlyon/sqlx.git" }
