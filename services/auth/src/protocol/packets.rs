@@ -1,13 +1,13 @@
 use assert_size_attribute::assert_eq_size;
 use bincode::Options;
 use derive_more::Display;
-use game::accounts::{LoginFailure, LoginVerifier};
+use game::accounts::{ConnectToken, LoginFailure};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use thiserror::Error;
 use wow_srp::Salt;
 
-const VERSION_CHALLENGE: [u8; 16] = [
+pub const VERSION_CHALLENGE: [u8; 16] = [
     0xBA, 0xA3, 0x1E, 0x99, 0xA0, 0x0B, 0x21, 0x57, 0xFC, 0x37, 0x3F, 0xB3, 0x69, 0xCD, 0xD2, 0xF1,
 ];
 
@@ -110,14 +110,16 @@ pub struct ConnectChallenge {
     pub security_flags: u8,
 }
 
-impl ConnectChallenge {
-    pub fn from_login_handler(handler: &dyn LoginVerifier) -> Self {
+/// Create a connect challenge packet for a given
+/// connect token.
+impl From<ConnectToken> for ConnectChallenge {
+    fn from(token: ConnectToken) -> Self {
         Self {
-            b_pub: *handler.get_b_pub(),
-            g: handler.get_g(),
-            n: handler.get_n(),
-            s: *handler.get_salt(),
-            security_flags: handler.get_security_flags(),
+            b_pub: *token.get_b_pub(),
+            g: token.get_g(),
+            n: token.get_n(),
+            s: *token.get_salt(),
+            security_flags: token.get_security_flags(),
         }
     }
 }
@@ -196,9 +198,9 @@ pub struct ConnectProofResponse {
 #[assert_eq_size([u8; 16 + 20 + 20 + 1])]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ReconnectProof {
-    pub r_1: [u8; 16],
-    pub r_2: [u8; 20],
-    pub r_3: [u8; 20],
+    pub proof_data: [u8; 16],
+    pub client_proof: [u8; 20],
+    pub unknown: [u8; 20],
     pub key_count: u8,
 }
 /// RealmlistRequest is sent by an authenticated
@@ -320,7 +322,7 @@ pub struct ReplyPacket2 {
 #[cfg(test)]
 mod test {
     use game::accounts::{Account, AccountId};
-    
+
     use test_case::test_case;
 
     use bincode::Options;

@@ -4,14 +4,14 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use std::{fmt, marker::PhantomData, net::Ipv4Addr, str};
+use std::{fmt, net::Ipv4Addr, str};
 
 use anyhow::{anyhow, Context, Result};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
 use game::{
-    accounts::{AccountService, LoginVerifier},
+    accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::RealmList,
 };
 use tracing::{debug, error, info, instrument};
@@ -19,7 +19,8 @@ use tracing::{debug, error, info, instrument};
 use crate::protocol::{
     packets::{
         AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
-        RealmListResponse, ReplyPacket, ReplyPacket2, ReturnCode,
+        RealmListResponse, ReconnectProof, ReplyPacket, ReplyPacket2, ReturnCode,
+        VERSION_CHALLENGE,
     },
     read_packet, Message,
 };
@@ -50,7 +51,7 @@ pub enum Command {
 /// Models the various valid states of the server.
 #[derive(Derivative, Display)]
 #[derivative(PartialEq, Debug)]
-pub enum RequestState<H: LoginVerifier> {
+pub enum RequestState {
     /// The initial state, nothing has been provided.
     Start,
 
@@ -58,19 +59,16 @@ pub enum RequestState<H: LoginVerifier> {
     #[display(fmt = "ConnectChallenge")]
     ConnectChallenge {
         #[derivative(Debug = "ignore")]
-        login_handler: H,
-        #[derivative(Debug = "ignore")]
-        response: ConnectChallenge,
+        token: ConnectToken,
     },
+
+    #[display(fmt = "ReconnectChallenge")]
+    ReconnectChallenge { token: ReconnectToken },
 
     // the server sends the challenge and gets a proof. this results
     // in either the authenticated or rejected states.
     /// The server has accepted the request.
-    #[display(fmt = "Authenticated")]
-    Authenticated {
-        #[derivative(Debug = "ignore")]
-        response: ConnectProofResponse,
-    },
+    Realmlist,
 
     /// The server has rejected the request.
     #[display(fmt = "Rejected")]
@@ -83,15 +81,16 @@ pub enum RequestState<H: LoginVerifier> {
     Done,
 }
 
-impl<H: LoginVerifier> RequestState<H> {
+impl RequestState {
     fn reject_from(state: &Self, reason: ReturnCode) -> Self {
         Self::Rejected {
             command: match state {
                 RequestState::Start => AuthCommand::ConnectRequest,
                 RequestState::ConnectChallenge { .. } => AuthCommand::AuthLogonProof,
-                RequestState::Authenticated { .. } => AuthCommand::RealmList,
+                RequestState::Realmlist { .. } => AuthCommand::RealmList,
                 RequestState::Rejected { command, .. } => *command,
                 RequestState::Done => AuthCommand::RealmList,
+                RequestState::ReconnectChallenge { .. } => AuthCommand::AuthReconnectProof,
             },
             reason,
         }
@@ -100,30 +99,14 @@ impl<H: LoginVerifier> RequestState<H> {
 
 /// Implements a WoW authentication server.
 #[derive(Debug)]
-pub struct AuthServer<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> {
+pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
     pub command_receiver: Receiver<Command>,
     pub reply_sender: Sender<ServerMessage>,
     pub accounts: T,
     pub realms: R,
-    pub phantom_data: PhantomData<H>,
 }
 
-impl<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> AuthServer<H, T, R> {
-    pub fn new(
-        command_receiver: Receiver<Command>,
-        reply_sender: Sender<ServerMessage>,
-        accounts: T,
-        realms: R,
-    ) -> Self {
-        Self {
-            command_receiver,
-            reply_sender,
-            accounts,
-            realms,
-            phantom_data: PhantomData,
-        }
-    }
-
+impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     /// Start the server, handling requests on the provided host and port.
     #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
@@ -159,19 +142,33 @@ impl<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> AuthServ
                     Ok(Message::ConnectRequest(request)) => {
                         handle_connect_request(&request, &self.accounts, &state, stream).await?
                     }
-                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
-                    Err(e) => return Err(e.into()),
-                },
-                RequestState::ConnectChallenge {
-                    ref login_handler, ..
-                } => match read_packet(&mut reader).await {
-                    Ok(Message::ConnectProof(proof)) => {
-                        handle_connect_proof(&proof, login_handler, &state, stream).await?
+                    Ok(Message::ReconnectRequest(request)) => {
+                        handle_reconnect_request(&request, &self.accounts, &state, stream).await?
                     }
                     Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
                     Err(e) => return Err(e.into()),
                 },
-                RequestState::Authenticated { .. } => match read_packet(&mut reader).await {
+                RequestState::ConnectChallenge { ref token, .. } => {
+                    match read_packet(&mut reader).await {
+                        Ok(Message::ConnectProof(proof)) => {
+                            handle_connect_proof(&proof, &self.accounts, token, &state, stream)
+                                .await?
+                        }
+                        Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                RequestState::ReconnectChallenge { ref token } => {
+                    match read_packet(&mut reader).await {
+                        Ok(Message::ReconnectProof(proof)) => {
+                            handle_reconnect_proof(&proof, &self.accounts, token, &state, stream)
+                                .await?
+                        }
+                        Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                RequestState::Realmlist { .. } => match read_packet(&mut reader).await {
                     Ok(Message::RealmList(_)) => handle_realmlist(&self.realms, stream).await?,
                     Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
                     Err(e) => return Err(e.into()),
@@ -192,12 +189,12 @@ impl<H: LoginVerifier, T: AccountService<H> + fmt::Debug, R: RealmList> AuthServ
 }
 
 #[instrument(skip(request, accounts))]
-async fn handle_connect_request<H: LoginVerifier>(
+async fn handle_connect_request(
     request: &ConnectRequest,
-    accounts: &dyn AccountService<H>,
-    state: &RequestState<H>,
+    accounts: &dyn AccountService,
+    state: &RequestState,
     stream: &mut TcpStream,
-) -> Result<RequestState<H>> {
+) -> Result<RequestState> {
     if request.build != 12340 {
         return Ok(RequestState::reject_from(
             &state,
@@ -212,7 +209,7 @@ async fn handle_connect_request<H: LoginVerifier>(
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
-                error!("user connected with invalid username: {}", e);
+                debug!("user connected with invalid username: {}", e);
                 return Ok(RequestState::reject_from(&state, ReturnCode::Failed));
             }
         }
@@ -220,69 +217,153 @@ async fn handle_connect_request<H: LoginVerifier>(
 
     debug!("auth challenge for {}", username);
 
-    let state = match accounts
+    let (state, response) = match accounts
         .initiate_login(username)
         .await
-        .map(|login_handler| RequestState::ConnectChallenge {
-            response: ConnectChallenge::from_login_handler(&login_handler),
-            login_handler,
-        }) {
+        .map(|token| (RequestState::ConnectChallenge { token }, token.into()))
+    {
         Ok(s) => s,
         Err(reason) => {
             return Ok(RequestState::reject_from(&state, reason.into()));
         }
     };
 
-    if let RequestState::ConnectChallenge { response, .. } = &state {
-        let mut buffer = [0u8; 256];
-        let packet = ReplyPacket::<ConnectChallenge>::new(response.clone());
-        let len = bincode::options().serialized_size(&packet)? as usize;
-        bincode::options().serialize_into(&mut buffer[..len], &packet)?;
-        stream.write(&buffer[..len]).await?;
-    }
+    let mut buffer = [0u8; 256];
+    let packet = ReplyPacket::<ConnectChallenge>::new(response);
+    let len = bincode::options().serialized_size(&packet)? as usize;
+    bincode::options().serialize_into(&mut buffer[..len], &packet)?;
+    stream.write(&buffer[..len]).await?;
 
     Ok(state)
 }
 
-#[instrument(skip(proof, login_handler))]
-async fn handle_connect_proof<H: LoginVerifier>(
+#[instrument(skip(proof, accounts, token, state, stream))]
+async fn handle_connect_proof(
     proof: &ConnectProof,
-    login_handler: &H,
-    state: &RequestState<H>,
+    accounts: &dyn AccountService,
+    token: &ConnectToken,
+    state: &RequestState,
     stream: &mut TcpStream,
-) -> Result<RequestState<H>> {
-    let state = match login_handler
-        .login(&proof.user_public_key, &proof.user_proof)
+) -> Result<RequestState> {
+    let (state, response) = match accounts
+        .complete_login(token, &proof.user_public_key, &proof.user_proof)
         .await
-        .map(|server_proof| RequestState::Authenticated {
-            response: ConnectProofResponse {
-                error: 0,
-                server_proof,
-                account_flags: 0x00800000,
-                survey_id: 0,
-                login_flags: 0,
-            },
+        .map(|server_proof| {
+            (
+                RequestState::Realmlist,
+                ConnectProofResponse {
+                    error: 0,
+                    server_proof,
+                    account_flags: 0x00800000,
+                    survey_id: 0,
+                    login_flags: 0,
+                },
+            )
         }) {
         Ok(s) => s,
         Err(status) => {
             return Ok(RequestState::reject_from(&state, status.into()));
         }
     };
-    if let RequestState::Authenticated { response } = &state {
-        stream
-            .write(&bincode::serialize(&ReplyPacket2 {
-                command: AuthCommand::AuthLogonProof,
-                message: *response,
-            })?)
-            .await?;
-    }
+
+    stream
+        .write(&bincode::serialize(&ReplyPacket2 {
+            command: AuthCommand::AuthLogonProof,
+            message: response,
+        })?)
+        .await?;
+
     Ok(state)
 }
 
-async fn handle_realmlist<H: LoginVerifier>(
-    realms: &dyn RealmList,
+#[instrument(skip(request, accounts))]
+async fn handle_reconnect_request(
+    request: &ConnectRequest,
+    accounts: &dyn AccountService,
+    state: &RequestState,
     stream: &mut TcpStream,
-) -> Result<RequestState<H>> {
+) -> Result<RequestState> {
+    if request.build != 12340 {
+        return Ok(RequestState::reject_from(
+            &state,
+            ReturnCode::VersionInvalid,
+        ));
+    }
+
+    let mut buffer = [0u8; 16];
+    let username = {
+        let username = &mut buffer[..request.identifier_length as usize];
+        stream.read(username).await?;
+        match str::from_utf8(username) {
+            Ok(s) => s,
+            Err(e) => {
+                debug!("user connected with invalid username: {}", e);
+                return Ok(RequestState::reject_from(&state, ReturnCode::Failed));
+            }
+        }
+    };
+
+    let token = match accounts.initiate_relogin(username).await {
+        Ok(token) => token,
+        Err(e) => return Ok(RequestState::reject_from(state, e.into())),
+    };
+
+    stream
+        .write(&bincode::options().serialize(&(
+            AuthCommand::AuthReconnectChallenge,
+            ReturnCode::Success,
+            token.reconnect_proof,
+            VERSION_CHALLENGE,
+        ))?)
+        .await?;
+
+    Ok(RequestState::ReconnectChallenge { token })
+}
+
+#[instrument(skip(proof, accounts, token, state, stream))]
+async fn handle_reconnect_proof(
+    proof: &ReconnectProof,
+    accounts: &dyn AccountService,
+    token: &ReconnectToken,
+    state: &RequestState,
+    stream: &mut TcpStream,
+) -> Result<RequestState> {
+    let (state, response) = match accounts
+        .complete_relogin(token, &proof.proof_data, &proof.client_proof)
+        .await
+        .map(|server_proof| {
+            (
+                RequestState::Realmlist,
+                ConnectProofResponse {
+                    error: 0,
+                    server_proof,
+                    account_flags: 0x00800000,
+                    survey_id: 0,
+                    login_flags: 0,
+                },
+            )
+        }) {
+        Ok(s) => s,
+        Err(status) => {
+            return Ok(RequestState::reject_from(&state, status.into()));
+        }
+    };
+
+    debug!("user has reauthenticated");
+
+    stream
+        .write(&bincode::serialize(&(
+            AuthCommand::AuthReconnectProof,
+            ReturnCode::Success,
+            0u16,
+        ))?)
+        .await?;
+
+    Ok(state)
+}
+
+#[instrument(skip(realms, stream))]
+async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Result<RequestState> {
     let realms = realms
         .realms()
         .await

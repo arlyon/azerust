@@ -1,12 +1,16 @@
+use std::convert::TryInto;
+
 use async_trait::async_trait;
 use game::{
     accounts::{
-        Account, AccountId, AccountOpError, AccountService, BanStatus, LoginFailure, LoginVerifier,
+        Account, AccountId, AccountOpError, AccountService, BanStatus, ConnectToken, LoginFailure,
+        ReconnectToken,
     },
     types::Locale,
 };
+use rand::Rng;
 use tracing::{debug, error, instrument};
-use wow_srp::{Salt, WowSRPServer};
+use wow_srp::{Salt, Verifier, WowSRPServer};
 
 #[derive(Debug, Clone)]
 pub struct MySQLAccountService {
@@ -21,69 +25,8 @@ impl MySQLAccountService {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct MySQLLoginVerifier(WowSRPServer, sqlx::MySqlPool);
-
 #[async_trait]
-impl LoginVerifier for MySQLLoginVerifier {
-    /// Get the g parameter in use by this server.
-    fn get_g(&self) -> Vec<u8> {
-        self.0.get_g()
-    }
-
-    /// Get the n parameter in use by this server.
-    fn get_n(&self) -> Vec<u8> {
-        self.0.get_n()
-    }
-
-    /// Get the random salt in use by this server.
-    fn get_salt(&self) -> &Salt {
-        self.0.get_salt()
-    }
-
-    /// Get the ephemeral public key for this server.
-    fn get_b_pub(&self) -> &[u8; 32] {
-        self.0.get_b_pub()
-    }
-
-    fn get_security_flags(&self) -> u8 {
-        0x0
-    }
-
-    async fn login(
-        &self,
-        public_key: &[u8; 32],
-        proof: &[u8; 20],
-    ) -> Result<[u8; 20], LoginFailure> {
-        let (proof, session_key) = self
-            .0
-            .verify_challenge_response(public_key, proof)
-            .map(|session_key| {
-                (
-                    self.0.get_server_proof(public_key, proof, &session_key),
-                    session_key,
-                )
-            })
-            .ok_or(LoginFailure::IncorrectPassword)?;
-
-        // update session information
-        // todo(arlyon) set this information
-        sqlx::query!(
-            "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?", 
-            &session_key[..], "0.0.0.0", u8::from(Locale::enUS), "Win", "ARLYON"
-        )
-        .execute(&self.1)
-        .await.map_err(|e| {
-            error!("error updating session: {}", e);
-            LoginFailure::DatabaseError
-        })?;
-
-        Ok(proof)
-    }
-}
-
-#[async_trait]
-impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
+impl AccountService for MySQLAccountService {
     #[instrument(skip(self))]
     async fn create_account(
         &self,
@@ -164,7 +107,7 @@ impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
         .map_err(|e| AccountOpError::PersistError(e.to_string()))
     }
 
-    async fn initiate_login(&self, username: &str) -> Result<MySQLLoginVerifier, LoginFailure> {
+    async fn initiate_login(&self, username: &str) -> Result<ConnectToken, LoginFailure> {
         let account = match self.get_account(username).await {
             Ok(Account {
                 ban_status: Some(status),
@@ -183,9 +126,75 @@ impl AccountService<MySQLLoginVerifier> for MySQLAccountService {
             }
         };
 
-        Ok(MySQLLoginVerifier(
-            WowSRPServer::new(&account.username, account.salt, account.verifier),
-            self.pool.clone(),
+        Ok(ConnectToken::new(
+            &account.username,
+            account.salt,
+            account.verifier,
         ))
+    }
+
+    async fn initiate_relogin(&self, username: &str) -> Result<ReconnectToken, LoginFailure> {
+        let request = sqlx::query!(
+            "SELECT a.id, a.username, a.locked, a.lock_country, a.last_ip, a.failed_logins, (ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate) as 'is_banned: bool', (ab.unbandate = ab.bandate) as 'is_permabanned: bool', aa.SecurityLevel as security_level, a.session_key_auth as session_key FROM account a LEFT JOIN account_access aa ON a.id = aa.AccountID LEFT JOIN account_banned ab ON ab.id = a.id AND ab.active = 1 WHERE a.username = ? AND a.session_key_auth IS NOT NULL", 
+            username
+        ).fetch_one(&self.pool).await.map_err(|_| LoginFailure::DatabaseError)?;
+
+        let ban_status = match (request.is_banned, request.is_permabanned) {
+            (_, Some(true)) => Some(BanStatus::Permanent),
+            (Some(true), _) => Some(BanStatus::Temporary),
+            _ => None,
+        };
+
+        let account = Account {
+            id: AccountId(request.id),
+            username: request.username,
+            salt: Salt([0u8; 32]),
+            verifier: Verifier([0u8; 32]),
+            ban_status,
+        };
+
+        // get session key
+
+        Ok(ReconnectToken::new(
+            account,
+            request
+                .session_key
+                .and_then(|k| k.as_slice().try_into().ok())
+                .ok_or(LoginFailure::DatabaseError)?,
+        ))
+    }
+
+    async fn complete_login(
+        &self,
+        token: &ConnectToken,
+        public_key: &[u8; 32],
+        client_proof: &[u8; 20],
+    ) -> Result<[u8; 20], LoginFailure> {
+        let (server_proof, session_key) = token.accept(public_key, client_proof)?;
+
+        // update session information
+        // todo(arlyon) set this information
+        sqlx::query!(
+            "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?", 
+            &session_key[..], "0.0.0.0", u8::from(Locale::enUS), "Win", "ARLYON"
+        )
+        .execute(&self.pool)
+        .await.map_err(|e| {
+            error!("error updating session: {}", e);
+            LoginFailure::DatabaseError
+        })?;
+
+        Ok(server_proof)
+    }
+
+    async fn complete_relogin(
+        &self,
+        token: &ReconnectToken,
+        proof_data: &[u8; 16],
+        client_proof: &[u8; 20],
+    ) -> Result<[u8; 20], LoginFailure> {
+        token
+            .accept(proof_data, client_proof)
+            .map(|_| client_proof.to_owned())
     }
 }
