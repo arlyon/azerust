@@ -312,13 +312,6 @@ impl ReplyPacket<()> {
     }
 }
 
-#[repr(C, packed(1))]
-#[derive(Serialize, Copy, Clone)]
-pub struct ReplyPacket2 {
-    pub command: AuthCommand,
-    pub message: ConnectProofResponse,
-}
-
 #[cfg(test)]
 mod test {
     use game::accounts::{Account, AccountId};
@@ -330,7 +323,7 @@ mod test {
 
     use super::{
         AuthCommand, ConnectChallenge, ConnectProofResponse, Realm, RealmListResponse, ReplyPacket,
-        ReplyPacket2, ReturnCode,
+        ReturnCode,
     };
 
     #[test]
