@@ -105,6 +105,12 @@ pub struct ConnectRequest {
 
 /// ConnectChallenge is sent to the client after
 /// a ConnectRequest with a challenge for it to solve.
+///
+/// note: make sure to serialize this without
+///       fixint encoding, as it encodes the usize
+///       of the vecs as u64, not u8
+///
+/// For more, see <https://wowdev.wiki/CMD_AUTH_LOGON_CHALLENGE_Server>
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectChallenge {
     pub b_pub: [u8; 32],
