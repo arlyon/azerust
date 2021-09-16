@@ -20,6 +20,7 @@ use game::accounts::AccountService;
 use human_panic::setup_panic;
 use mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use structopt::StructOpt;
+use tracing::debug;
 
 use crate::{
     authserver::AuthServer,
@@ -100,6 +101,7 @@ async fn start_server<U: 'static + UI + Send>(
     //     }),
     // });
 
+    debug!("Loaded config {:?}", config);
     let accounts = MySQLAccountService::new(&config.login_database).await?;
     let realms = MySQLRealmList::new(&config.login_database, Duration::from_secs(60)).await?;
 

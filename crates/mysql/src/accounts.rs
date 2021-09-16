@@ -18,6 +18,7 @@ pub struct MySQLAccountService {
 
 impl MySQLAccountService {
     pub async fn new(connect: &str) -> Result<Self, sqlx::Error> {
+        debug!("Starting accounts service");
         Ok(Self {
             pool: sqlx::MySqlPool::connect(connect).await?,
         })
