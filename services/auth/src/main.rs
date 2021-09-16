@@ -101,9 +101,8 @@ async fn start_server<U: 'static + UI + Send>(
     //     }),
     // });
 
-    let accounts = MySQLAccountService::new("mysql://localhost:49153/auth").await?;
-    let realms =
-        MySQLRealmList::new("mysql://localhost:49153/auth", Duration::from_secs(60)).await?;
+    let accounts = MySQLAccountService::new(&config.login_database).await?;
+    let realms = MySQLRealmList::new(&config.login_database, Duration::from_secs(60)).await?;
 
     AuthServer {
         command_receiver,

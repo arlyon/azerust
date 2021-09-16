@@ -3,10 +3,9 @@ name = "mysql"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
-license = "MIT"
 
 [dependencies]
-sqlx = { version = "0.4.2", features = ["mysql"], git = "https://github.com/arlyon/sqlx.git" }
+sqlx = { version = "0.5", features = ["mysql"] }
 tracing = "0.1.22"
 tracing-futures = "0.2.4"
 async-trait = "0.1.42"

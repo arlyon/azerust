@@ -260,10 +260,11 @@ async fn handle_connect_proof(
     };
 
     stream
-        .write(&bincode::serialize(&(
-            AuthCommand::AuthLogonProof,
-            response,
-        ))?)
+        .write(
+            &bincode::options()
+                .with_fixint_encoding()
+                .serialize(&(AuthCommand::AuthLogonProof, response))?,
+        )
         .await?;
 
     Ok(state)
@@ -350,7 +351,11 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
 
     let resp = RealmListResponse::from_realms(&realms)?;
     let mut packet = Vec::with_capacity((resp.packet_size + 8).into());
-    packet.append(&mut bincode::serialize(&(AuthCommand::RealmList, resp))?);
+    packet.append(
+        &mut bincode::options()
+            .with_fixint_encoding()
+            .serialize(&(AuthCommand::RealmList, resp))?,
+    );
     for realm in realms {
         packet.append(
             &mut bincode::options()

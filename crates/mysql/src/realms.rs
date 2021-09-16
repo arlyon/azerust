@@ -28,7 +28,7 @@ impl RealmList for MySQLRealmList {
         let now = SystemTime::now();
         if now > *self.next_update.read().await {
             if let Ok(realms) = sqlx::query_as!(
-                Realm, 
+                Realm,
                 "SELECT id as 'id: _', name, icon as 'realm_type: _', gamebuild as build, address as 'external_address', localAddress as 'local_address: _', localSubnetMask as 'local_subnet_mask: _', port, flag as 'flags: _', timezone, population FROM realmlist WHERE flag <> 3 ORDER BY id"
             )
             .fetch_all(&self.pool)

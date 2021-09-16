@@ -5,14 +5,15 @@
 
 use async_trait::async_trait;
 use derive_more::{From, Into};
-use enumflags2::BitFlags;
+use enumflags2::bitflags;
 use num_enum::IntoPrimitive;
 use sqlx::Type;
 
 /// The various flags that a realm can have.
 /// They are implemented as BitFlags.
 #[repr(u8)]
-#[derive(Clone, Copy, BitFlags, Debug)]
+#[bitflags]
+#[derive(Clone, Copy, Debug)]
 pub enum RealmFlags {
     Invalid = 0b0000_0001,
     Offline = 0b0000_0010,

@@ -14,7 +14,9 @@ pub const VERSION_CHALLENGE: [u8; 16] = [
 /// All the known OpCodes
 #[repr(u8)]
 #[serde(into = "u8")]
-#[derive(TryFromPrimitive, IntoPrimitive, Debug, Display, Serialize, PartialEq, Eq, Clone, Copy)]
+#[derive(
+    TryFromPrimitive, IntoPrimitive, Debug, Display, Serialize, PartialEq, Eq, Clone, Copy,
+)]
 pub enum AuthCommand {
     ConnectRequest = 0x00,
     AuthLogonProof = 0x01,
@@ -456,8 +458,8 @@ mod test {
         ];
 
         let response = (
-             AuthCommand::AuthLogonProof,
-             ConnectProofResponse {
+            AuthCommand::AuthLogonProof,
+            ConnectProofResponse {
                 error: 0,
                 server_proof: [
                     177, 50, 224, 237, 37, 4, 196, 159, 100, 31, 30, 14, 198, 45, 137, 158, 228,
@@ -469,7 +471,13 @@ mod test {
             },
         );
 
-        assert_eq!(bincode::serialize(&response).unwrap(), &data)
+        assert_eq!(
+            bincode::options()
+                .with_fixint_encoding()
+                .serialize(&response)
+                .unwrap(),
+            &data
+        )
     }
 
     #[test]

@@ -3,7 +3,6 @@ name = "game"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
-license = "MIT"
 
 [dependencies]
 arrayvec = "0.5.2"
@@ -13,7 +12,7 @@ enumflags2 = "0.7.0-preview1"
 num_enum = "0.5.1"
 rand = "0.8.0"
 sha-1 = "0.9.2"
-sqlx = { version = "0.4.2", features = ["macros", "mysql"], git = "https://github.com/arlyon/sqlx.git" }
+sqlx = { version = "0.5", features = ["macros", "mysql"] }
 strum = "0.20.0"
 strum_macros = "0.20.1"
 thiserror = "1.0.22"

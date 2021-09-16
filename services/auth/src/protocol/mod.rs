@@ -1,4 +1,5 @@
 use async_std::prelude::*;
+use bincode::Options;
 use std::convert::TryFrom;
 
 use derive_more::Display;
@@ -86,16 +87,24 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     }
 
     match command {
-        AuthCommand::ConnectRequest => bincode::deserialize(&buffer[..])
+        AuthCommand::ConnectRequest => bincode::options()
+            .with_fixint_encoding()
+            .deserialize(&buffer[..command_len])
             .map(Message::ConnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthLogonProof => bincode::deserialize(&buffer[..])
+        AuthCommand::AuthLogonProof => bincode::options()
+            .with_fixint_encoding()
+            .deserialize(&buffer[..command_len])
             .map(Message::ConnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectChallenge => bincode::deserialize(&buffer[..])
+        AuthCommand::AuthReconnectChallenge => bincode::options()
+            .with_fixint_encoding()
+            .deserialize(&buffer[..command_len])
             .map(Message::ReconnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectProof => bincode::deserialize(&buffer[..])
+        AuthCommand::AuthReconnectProof => bincode::options()
+            .with_fixint_encoding()
+            .deserialize(&buffer[..command_len])
             .map(Message::ReconnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
         _ => Err(PacketHandleError::UnsupportedCommand(command)),
