@@ -81,7 +81,7 @@ impl From<LoginFailure> for ReturnCode {
 
 /// ConnectRequest is sent to the server by a client
 /// looking to freshly connect to the server.
-#[repr(packed(1), C)]
+#[repr(packed)]
 #[assert_eq_size([u8; 1 + 2 + 4 + 1 + 1 + 1 + 2 + 4 + 4 + 4 + 4 + 4 + 1])]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ConnectRequest {
@@ -172,7 +172,7 @@ impl Serialize for ConnectChallenge {
 
 /// ConnectProof is sent to the server after a
 /// client receives a ConnectChallenge.
-#[repr(packed(1))]
+#[repr(packed)]
 #[assert_eq_size([u8; 32 + 20 + 20 + 1 + 1])]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConnectProof {
@@ -185,7 +185,7 @@ pub struct ConnectProof {
 
 /// ConnectProofResponse is sent to the client
 /// after verifying a ConnectProof request.
-#[repr(C, packed(1))]
+#[repr(packed)]
 #[assert_eq_size([u8; 1 + 20 + 4 + 4 + 2])]
 #[derive(PartialEq, Debug, Serialize, Copy, Clone)]
 pub struct ConnectProofResponse {
@@ -198,7 +198,7 @@ pub struct ConnectProofResponse {
 
 /// ReconnectProof is sent to the server by a client
 /// in response to a ReconnectChallenge.
-#[repr(packed(1))]
+#[repr(packed)]
 #[assert_eq_size([u8; 16 + 20 + 20 + 1])]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ReconnectProof {
@@ -209,7 +209,7 @@ pub struct ReconnectProof {
 }
 /// RealmlistRequest is sent by an authenticated
 /// account after the ReconnectProof is validated.
-#[repr(packed(1))]
+#[repr(packed)]
 #[assert_eq_size([u8; 4])]
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct RealmListRequest {
@@ -217,7 +217,7 @@ pub struct RealmListRequest {
 }
 
 /// RealmListResponse is returned from a RealmlistRequest
-#[repr(packed(1))]
+#[repr(packed)]
 #[assert_eq_size([u8; 2 + 4 + 2])]
 #[derive(Serialize, Deserialize, Default, Debug, Copy, Clone)]
 pub struct RealmListResponse {
