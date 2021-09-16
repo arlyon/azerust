@@ -1,4 +1,3 @@
-#![feature(arbitrary_enum_discriminant)]
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
