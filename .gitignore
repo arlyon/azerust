@@ -2,3 +2,4 @@
 .env
 .auth.history
 config.yaml
+scripts/db

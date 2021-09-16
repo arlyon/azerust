@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  auth:
+    image: arlyon/azerust-auth
+    build:
+      context: .
+    depends_on: [database]
+    environment:
+      AZERUST_LOGIN_DATABASE: mysql://root:azerust@database/auth
+      RUST_LOG: mysql=DEBUG,auth=DEBUG
+    volumes: []
+    ports:
+      - "3724:3724"
+  database:
+    image: "mysql:8"
+    environment:
+      MYSQL_ROOT_PASSWORD: azerust
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./scripts/db:/docker-entrypoint-initdb.d:Z
