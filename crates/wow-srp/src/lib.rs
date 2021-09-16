@@ -103,7 +103,7 @@ impl Verifier {
 /// let (verifier, salt) = WowSRPServer::register("ARLYON", "TEST");
 ///
 /// // some time later, load the username,
-/// // salt and verifier from the database.f
+/// // salt and verifier from the database.
 /// let server = WowSRPServer::new("ARLYON", salt, verifier);
 /// ```
 #[derive(Copy, Clone, Debug, PartialEq)]
