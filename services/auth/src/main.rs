@@ -33,6 +33,7 @@ mod conf;
 mod opt;
 mod protocol;
 mod ui;
+mod wow_bincode;
 
 #[async_std::main]
 async fn main() -> Result<()> {

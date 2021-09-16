@@ -8,6 +8,7 @@ use thiserror::Error;
 use tracing::{instrument, trace};
 
 use self::packets::{AuthCommand, ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
+use crate::wow_bincode::wow_bincode;
 
 pub mod packets;
 
@@ -38,16 +39,20 @@ impl TryFrom<&[u8]> for Message {
         AuthCommand::try_from(command)
             .map_err(|_| MessageParseError::InvalidCommand(command))
             .and_then(|c| match c {
-                AuthCommand::ConnectRequest => bincode::deserialize(data)
+                AuthCommand::ConnectRequest => wow_bincode()
+                    .deserialize(data)
                     .map(Message::ConnectRequest)
                     .map_err(Into::into),
-                AuthCommand::AuthLogonProof => bincode::deserialize(data)
+                AuthCommand::AuthLogonProof => wow_bincode()
+                    .deserialize(data)
                     .map(Message::ConnectProof)
                     .map_err(Into::into),
-                AuthCommand::AuthReconnectChallenge => bincode::deserialize(data)
+                AuthCommand::AuthReconnectChallenge => wow_bincode()
+                    .deserialize(data)
                     .map(Message::ReconnectRequest)
                     .map_err(Into::into),
-                AuthCommand::AuthReconnectProof => bincode::deserialize(data)
+                AuthCommand::AuthReconnectProof => wow_bincode()
+                    .deserialize(data)
                     .map(Message::ReconnectProof)
                     .map_err(Into::into),
                 AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
@@ -87,23 +92,19 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     }
 
     match command {
-        AuthCommand::ConnectRequest => bincode::options()
-            .with_fixint_encoding()
+        AuthCommand::ConnectRequest => wow_bincode()
             .deserialize(&buffer[..command_len])
             .map(Message::ConnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthLogonProof => bincode::options()
-            .with_fixint_encoding()
+        AuthCommand::AuthLogonProof => wow_bincode()
             .deserialize(&buffer[..command_len])
             .map(Message::ConnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectChallenge => bincode::options()
-            .with_fixint_encoding()
+        AuthCommand::AuthReconnectChallenge => wow_bincode()
             .deserialize(&buffer[..command_len])
             .map(Message::ReconnectRequest)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthReconnectProof => bincode::options()
-            .with_fixint_encoding()
+        AuthCommand::AuthReconnectProof => wow_bincode()
             .deserialize(&buffer[..command_len])
             .map(Message::ReconnectProof)
             .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),

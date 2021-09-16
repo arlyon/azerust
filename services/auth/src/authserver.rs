@@ -16,12 +16,15 @@ use game::{
 };
 use tracing::{debug, error, info, instrument};
 
-use crate::protocol::{
-    packets::{
-        AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
-        RealmListResponse, ReconnectProof, ReplyPacket, ReturnCode, VERSION_CHALLENGE,
+use crate::{
+    protocol::{
+        packets::{
+            AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest,
+            Realm, RealmListResponse, ReconnectProof, ReplyPacket, ReturnCode, VERSION_CHALLENGE,
+        },
+        read_packet, Message,
     },
-    read_packet, Message,
+    wow_bincode::wow_bincode,
 };
 
 /// Messages to the UI from the server
@@ -174,7 +177,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 },
                 RequestState::Rejected { command, reason } => {
                     let mut buffer = [0u8; 2];
-                    bincode::options().serialize_into(&mut buffer[..], &(command, reason))?;
+                    wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
                     info!("rejecting {} due to {}", command, reason);
                     stream.write(&buffer).await?;
                     RequestState::Done
@@ -187,7 +190,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     }
 }
 
-#[instrument(skip(request, accounts))]
+#[instrument(skip(request, accounts, stream))]
 async fn handle_connect_request(
     request: &ConnectRequest,
     accounts: &dyn AccountService,
@@ -225,8 +228,21 @@ async fn handle_connect_request(
 
     let mut buffer = [0u8; 256];
     let packet = ReplyPacket::<ConnectChallenge>::new(response);
-    let len = bincode::options().serialized_size(&packet)? as usize;
-    bincode::options().serialize_into(&mut buffer[..len], &packet)?;
+
+    // we need to use varint encoding here, otherwise the vector length will be encoded as a u64
+    let len = wow_bincode()
+        .with_varint_encoding()
+        .serialized_size(&packet)? as usize;
+    wow_bincode()
+        .with_varint_encoding()
+        .serialize_into(&mut buffer[..len], &packet)?;
+
+    debug!(
+        "writing {:?} ({} bytes) for {:?}",
+        &buffer[..len],
+        len,
+        packet
+    );
     stream.write(&buffer[..len]).await?;
 
     Ok(state)
@@ -260,11 +276,7 @@ async fn handle_connect_proof(
     };
 
     stream
-        .write(
-            &bincode::options()
-                .with_fixint_encoding()
-                .serialize(&(AuthCommand::AuthLogonProof, response))?,
-        )
+        .write(&wow_bincode().serialize(&(AuthCommand::AuthLogonProof, response))?)
         .await?;
 
     Ok(state)
@@ -351,18 +363,9 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
 
     let resp = RealmListResponse::from_realms(&realms)?;
     let mut packet = Vec::with_capacity((resp.packet_size + 8).into());
-    packet.append(
-        &mut bincode::options()
-            .with_fixint_encoding()
-            .serialize(&(AuthCommand::RealmList, resp))?,
-    );
+    packet.append(&mut wow_bincode().serialize(&(AuthCommand::RealmList, resp))?);
     for realm in realms {
-        packet.append(
-            &mut bincode::options()
-                .with_fixint_encoding()
-                .with_null_terminated_str_encoding()
-                .serialize(&realm)?,
-        );
+        packet.append(&mut wow_bincode().serialize(&realm)?);
     }
     packet.extend_from_slice(&[0x10, 0x0]);
 

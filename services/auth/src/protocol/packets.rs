@@ -7,6 +7,8 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use thiserror::Error;
 use wow_srp::Salt;
 
+use crate::wow_bincode::wow_bincode;
+
 pub const VERSION_CHALLENGE: [u8; 16] = [
     0xBA, 0xA3, 0x1E, 0x99, 0xA0, 0x0B, 0x21, 0x57, 0xFC, 0x37, 0x3F, 0xB3, 0x69, 0xCD, 0xD2, 0xF1,
 ];
@@ -236,9 +238,7 @@ impl RealmListResponse {
         let len: u64 = realms
             .iter()
             .map(|r| {
-                bincode::options()
-                    .with_null_terminated_str_encoding()
-                    .with_fixint_encoding()
+                wow_bincode()
                     .serialized_size(r)
                     .map_err(|_| SizeReadError(r.name.clone()))
             })
@@ -284,7 +284,7 @@ impl Realm {
 }
 
 /// Reply Packet wraps a message with its opcode.
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ReplyPacket<T: Serialize> {
     command: AuthCommand,
     unknown: u8,
@@ -325,6 +325,7 @@ mod test {
         AuthCommand, ConnectChallenge, ConnectProofResponse, Realm, RealmListResponse, ReplyPacket,
         ReturnCode,
     };
+    use crate::wow_bincode::wow_bincode;
 
     #[test]
     pub fn realm_response_size() {
@@ -346,14 +347,7 @@ mod test {
             0x39, 0x35, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x2,
         ];
 
-        assert_eq!(
-            &bincode::options()
-                .with_null_terminated_str_encoding()
-                .with_fixint_encoding()
-                .serialize(&realm)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(&wow_bincode().serialize(&realm).unwrap(), &data)
     }
 
     #[test_case( &[],  &[0x8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0] ; "no realms")]
@@ -372,14 +366,7 @@ mod test {
     ] ; "a realm")]
     pub fn realmlist_response_size(realms: &[Realm], data: &[u8]) {
         let realmlist = RealmListResponse::from_realms(realms).unwrap();
-        assert_eq!(
-            &bincode::options()
-                .with_null_terminated_str_encoding()
-                .with_fixint_encoding()
-                .serialize(&realmlist)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(&wow_bincode().serialize(&realmlist).unwrap(), &data)
     }
 
     #[test]
@@ -388,19 +375,13 @@ mod test {
 
         let packet =
             ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::UnknownAccount);
-        assert_eq!(
-            &bincode::options()
-                .with_varint_encoding()
-                .serialize(&packet)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 
     #[test]
     pub fn encode_auth_command() {
         let x = AuthCommand::AuthLogonProof;
-        assert_eq!(bincode::serialize(&x).unwrap(), [0x01]);
+        assert_eq!(wow_bincode().serialize(&x).unwrap(), [0x01]);
     }
 
     #[test]
@@ -469,13 +450,7 @@ mod test {
             },
         );
 
-        assert_eq!(
-            bincode::options()
-                .with_fixint_encoding()
-                .serialize(&response)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(wow_bincode().serialize(&response).unwrap(), &data)
     }
 
     #[test]
@@ -483,13 +458,7 @@ mod test {
         let data = [0x0, 0x0, 0x0];
 
         let packet = ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::Success);
-        assert_eq!(
-            &bincode::options()
-                .with_varint_encoding()
-                .serialize(&packet)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 
     #[test]
@@ -497,12 +466,6 @@ mod test {
         let data = [0x0, 0x0, 0x3];
 
         let packet = ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::Banned);
-        assert_eq!(
-            &bincode::options()
-                .with_varint_encoding()
-                .serialize(&packet)
-                .unwrap(),
-            &data
-        )
+        assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 }
