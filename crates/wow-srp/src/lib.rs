@@ -118,11 +118,12 @@ pub struct WowSRPServer {
 impl WowSRPServer {
     /// Create a new instance of a server verifier.
     pub fn new(username: &str, salt: Salt, verifier: Verifier) -> Self {
-        let b = [
-            0xF0, 0xA4, 0xBB, 0x60, 0x1C, 0xB3, 0xE5, 0x03, 0x41, 0x26, 0xD0, 0xC7, 0x95, 0x73,
-            0x19, 0xD3, 0xCB, 0x0D, 0x7B, 0xD6, 0xFE, 0x2E, 0x3C, 0x9F, 0x6F, 0x0C, 0x27, 0x28,
-            0x17, 0x55, 0x76, 0x1F,
-        ];
+        let mut rng = rand::thread_rng();
+        let b = rng.gen();
+        WowSRPServer::new_with_b(username, salt, verifier, b)
+    }
+
+    pub(crate) fn new_with_b(username: &str, salt: Salt, verifier: Verifier, b: [u8; 32]) -> Self {
         Self {
             salt,
             b_pub: Self::calculate_b_pub(&b, &verifier),
@@ -309,7 +310,7 @@ mod test {
             211, 141, 6,
         ];
 
-        let server = WowSRPServer::new(
+        let server = WowSRPServer::new_with_b(
             &"ARLYON",
             Salt([
                 224, 222, 178, 127, 204, 184, 244, 126, 70, 90, 69, 35, 84, 22, 9, 131, 253, 198,
@@ -319,6 +320,11 @@ mod test {
                 83, 39, 153, 164, 62, 235, 129, 78, 56, 219, 154, 148, 34, 246, 103, 86, 198, 149,
                 125, 69, 184, 96, 172, 156, 203, 86, 185, 27, 161, 55, 61, 8,
             ]),
+            [
+                0xF0, 0xA4, 0xBB, 0x60, 0x1C, 0xB3, 0xE5, 0x03, 0x41, 0x26, 0xD0, 0xC7, 0x95, 0x73,
+                0x19, 0xD3, 0xCB, 0x0D, 0x7B, 0xD6, 0xFE, 0x2E, 0x3C, 0x9F, 0x6F, 0x0C, 0x27, 0x28,
+                0x17, 0x55, 0x76, 0x1F,
+            ],
         );
 
         server.verify_challenge_response(&a_pub, &client_m).unwrap();
