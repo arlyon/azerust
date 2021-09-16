@@ -1,6 +1,6 @@
-use async_std::{prelude::FutureExt, sync::RwLock};
 use std::time::{Duration, SystemTime};
 
+use async_std::{prelude::FutureExt, sync::RwLock};
 use async_trait::async_trait;
 use game::realms::{Realm, RealmList};
 

@@ -8,7 +8,6 @@ use game::{
     },
     types::Locale,
 };
-use rand::Rng;
 use tracing::{debug, error, instrument};
 use wow_srp::{Salt, Verifier, WowSRPServer};
 

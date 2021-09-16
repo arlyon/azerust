@@ -1,7 +1,7 @@
-use async_std::channel::{Receiver, Sender};
 use std::io;
 
 use anyhow::Result;
+use async_std::channel::{Receiver, Sender};
 use async_trait::async_trait;
 use colored::*;
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};

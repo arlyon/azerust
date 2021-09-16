@@ -316,11 +316,9 @@ impl ReplyPacket<()> {
 
 #[cfg(test)]
 mod test {
-    use game::accounts::{Account, AccountId};
-
-    use test_case::test_case;
-
     use bincode::Options;
+    use game::accounts::{Account, AccountId};
+    use test_case::test_case;
     use wow_srp::{Salt, Verifier, WowSRPServer};
 
     use super::{

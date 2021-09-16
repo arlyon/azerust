@@ -6,12 +6,12 @@ edition = "2018"
 
 [dependencies]
 sqlx = { version = "0.5", features = ["mysql"] }
-tracing = "0.1.22"
-tracing-futures = "0.2.4"
-async-trait = "0.1.42"
+tracing = "0.1"
+tracing-futures = "0.2"
+async-trait = "0.1"
 wow-srp = { path = "../wow-srp" }
 game = { path = "../game" }
-lazy_static = "1.4.0"
-rand = "0.8.0"
-async-std = "1.8.0"
-sha-1 = "0.9.2"
+lazy_static = "1.4"
+rand = "0.8"
+async-std = "1.8"
+sha-1 = "0.9"

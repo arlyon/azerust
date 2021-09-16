@@ -1,7 +1,7 @@
-use async_std::prelude::*;
-use bincode::Options;
 use std::convert::TryFrom;
 
+use async_std::prelude::*;
+use bincode::Options;
 use derive_more::Display;
 use num_enum::TryFromPrimitiveError;
 use thiserror::Error;

@@ -16,7 +16,10 @@
 use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::Result;
+use conf::AuthServerConfig;
+use game::accounts::AccountService;
 use human_panic::setup_panic;
+use mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use structopt::StructOpt;
 
 use crate::{
@@ -24,9 +27,6 @@ use crate::{
     opt::{AccountCommand, Opt},
     ui::{Repl, Tui, UI},
 };
-use conf::AuthServerConfig;
-use game::accounts::AccountService;
-use mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
 
 mod authserver;
 mod conf;

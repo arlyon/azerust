@@ -1,18 +1,16 @@
-use async_std::channel::{Receiver, Sender};
-
 use anyhow::Result;
+use async_std::channel::{Receiver, Sender};
+use async_trait::async_trait;
 use authserver::ServerMessage;
 use colored::*;
 use rustyline::{error::ReadlineError, Editor};
 use structopt::StructOpt;
 
+use super::UI;
 use crate::{
     authserver,
     opt::{AccountCommand, Command},
 };
-
-use super::UI;
-use async_trait::async_trait;
 
 pub struct Repl;
 

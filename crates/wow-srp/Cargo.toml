@@ -5,11 +5,10 @@ authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
 
 [dependencies]
-lazy_static = "1.4.0"
-num-bigint = "0.3.1"
-rand = "0.8.0"
-rand_derive = "0.5.0"
-serde = { version = "1.0.118", features = ["derive"] }
-sha-1 = "0.9.2"
-sqlx = { version = "0.5" }
-tracing = "0.1.22"
+lazy_static = "1.4"
+num-bigint = "0.4"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+sha-1 = "0.9"
+sqlx = "0.5"
+tracing = "0.1"

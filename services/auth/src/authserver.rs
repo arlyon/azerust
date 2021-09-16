@@ -1,12 +1,12 @@
+use std::{fmt, net::Ipv4Addr, str};
+
+use anyhow::{anyhow, Context, Result};
 use async_std::{
     channel::{Receiver, Sender},
     net::{TcpListener, TcpStream},
     prelude::*,
     stream::StreamExt,
 };
-use std::{fmt, net::Ipv4Addr, str};
-
-use anyhow::{anyhow, Context, Result};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
