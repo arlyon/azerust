@@ -26,7 +26,7 @@ pub enum RealmFlags {
 }
 
 /// The various types of realm.
-/// For more, see https://wow.tools/dbc/?dbc=cfg_configs&build=3.3.5.12340
+/// For more, see <https://wow.tools/dbc/?dbc=cfg_configs&build=3.3.5.12340>
 #[repr(u8)]
 #[derive(Clone, Copy, Type, Debug, IntoPrimitive)]
 pub enum RealmType {
