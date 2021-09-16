@@ -85,7 +85,12 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     };
 
     let read_len = packet.read(&mut buffer[..command_len]).await?;
-    trace!("read {:?} into {:02X?}", read_len, &buffer[..read_len]);
+    trace!(
+        "read {:02X?} ({} bytes) for command {}",
+        &buffer[..read_len],
+        read_len,
+        command
+    );
 
     if read_len != command_len {
         return Err(PacketHandleError::MessageLength(read_len, command_len));
