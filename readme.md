@@ -3,7 +3,8 @@
 Azerust is an experimental WoW server emulator for patch 3.3.5
 written in Rust. Currently, it only implements the auth server.
 It is currently being built to be compatible (read: piggy back
-on top of) the TrinityCore database. Our goals are:
+on top of) the TrinityCore database. Note, however, that we use 
+mariadb in the docker-compose file. Our goals are:
 
 - fast
 - readable
@@ -34,6 +35,9 @@ off the incredible Trinitycore project.
 > cd -
 > docker compose up
 ```
+
+You will also need to create a `config-compose.yml` which is used
+by the image to  
 
 The downloaded SQL scripts will be used to set up the databases.
 
@@ -75,4 +79,13 @@ For example, we can enable debug mode for the azerust packages:
 
 ```
 RUST_LOG=auth=debug,mysql=debug,game=debug azerust log
+```
+
+## Account Creation
+
+To create a command, you can use the `exec` command to run commands 
+against the database.
+
+```
+azerust exec account create <username> <password> <email>
 ```
