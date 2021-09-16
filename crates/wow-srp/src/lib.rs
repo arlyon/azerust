@@ -286,15 +286,15 @@ mod test {
             13, 124, 152, 156, 116, 130, 69, 161, 134, 49, 47, 87,
         ];
 
-        let K = WowSRPServer::derive_session_key(&s);
+        let k = WowSRPServer::derive_session_key(&s);
 
-        let K_expected: [u8; 40] = [
+        let k_expected: [u8; 40] = [
             250, 249, 162, 120, 246, 212, 243, 32, 54, 127, 15, 13, 84, 137, 96, 197, 162, 197, 95,
             221, 107, 218, 252, 23, 37, 95, 250, 83, 182, 53, 105, 254, 23, 14, 207, 191, 85, 207,
             209, 111,
         ];
 
-        assert_eq!(K, K_expected);
+        assert_eq!(k, k_expected);
     }
 
     #[test]
