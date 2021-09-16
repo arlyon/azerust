@@ -1,5 +1,6 @@
 /target
 .env
 .auth.history
-config.yaml
+config*.yaml
 scripts/db
+data
