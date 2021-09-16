@@ -13,10 +13,10 @@ pub const VERSION_CHALLENGE: [u8; 16] = [
 
 /// All the known OpCodes
 #[repr(u8)]
-#[serde(into = "u8")]
 #[derive(
     TryFromPrimitive, IntoPrimitive, Debug, Display, Serialize, PartialEq, Eq, Clone, Copy,
 )]
+#[serde(into = "u8")]
 pub enum AuthCommand {
     ConnectRequest = 0x00,
     AuthLogonProof = 0x01,
@@ -32,8 +32,8 @@ pub enum AuthCommand {
 
 /// All the known return codes from the API
 #[repr(u8)]
-#[serde(into = "u8")]
 #[derive(Serialize, IntoPrimitive, Debug, PartialEq, Eq, Clone, Copy, Display)]
+#[serde(into = "u8")]
 pub enum ReturnCode {
     Success = 0x00,
     Failed = 0x01,
