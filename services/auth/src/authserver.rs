@@ -61,9 +61,6 @@ pub enum RequestState {
         command: AuthCommand,
         reason: ReturnCode,
     },
-
-    /// We are done with the request.
-    Done,
 }
 
 /// Implements a WoW authentication server.
@@ -166,51 +163,32 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         let mut state = RequestState::Start;
 
         loop {
-            debug!("handling state {:?}", state);
-            state = match state {
-                RequestState::Start => match read_packet(&mut reader).await {
-                    Ok(Message::ConnectRequest(request)) => {
-                        handle_connect_request(&request, &self.accounts, &state, stream).await?
-                    }
-                    Ok(Message::ReconnectRequest(request)) => {
-                        handle_reconnect_request(&request, &self.accounts, &state, stream).await?
-                    }
-                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
-                    Err(e) => return Err(e.into()),
-                },
-                RequestState::ConnectChallenge { ref token, .. } => {
-                    match read_packet(&mut reader).await {
-                        Ok(Message::ConnectProof(proof)) => {
-                            handle_connect_proof(&proof, &self.accounts, token, &state, stream)
-                                .await?
-                        }
-                        Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
-                        Err(e) => return Err(e.into()),
-                    }
+            let message = read_packet(&mut reader).await?;
+            debug!("received message {} in state {}", message, state);
+            state = match (state, message) {
+                (_, Message::ConnectRequest(r)) => {
+                    handle_connect_request(&r, &self.accounts, stream).await?
                 }
-                RequestState::ReconnectChallenge { ref token } => {
-                    match read_packet(&mut reader).await {
-                        Ok(Message::ReconnectProof(proof)) => {
-                            handle_reconnect_proof(&proof, &self.accounts, token, &state, stream)
-                                .await?
-                        }
-                        Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
-                        Err(e) => return Err(e.into()),
-                    }
+                (_, Message::ReconnectRequest(r)) => {
+                    handle_reconnect_request(&r, &self.accounts, stream).await?
                 }
-                RequestState::Realmlist { .. } => match read_packet(&mut reader).await {
-                    Ok(Message::RealmList(_)) => handle_realmlist(&self.realms, stream).await?,
-                    Ok(p) => return Err(anyhow!("received message {} in state {}", p, state)),
-                    Err(e) => return Err(e.into()),
-                },
-                RequestState::Rejected { command, reason } => {
-                    let mut buffer = [0u8; 2];
-                    wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
-                    info!("rejecting {} due to {}", command, reason);
-                    stream.write(&buffer).await?;
-                    RequestState::Done
+                (RequestState::ConnectChallenge { token }, Message::ConnectProof(proof)) => {
+                    handle_connect_proof(&proof, &self.accounts, &token, stream).await?
                 }
-                RequestState::Done => break,
+                (RequestState::ReconnectChallenge { token }, Message::ReconnectProof(proof)) => {
+                    handle_reconnect_proof(&proof, &self.accounts, &token, stream).await?
+                }
+                (RequestState::Realmlist, Message::RealmList(_)) => handle_realmlist(&self.realms, stream).await?,
+                (_, Message::ConnectProof(_) | Message::ReconnectProof(_)) => return Err(anyhow!("received proof before request, closing connection")),
+                _ => return Err(anyhow!("received message in bad state, closing connection")),
+            };
+
+            if let RequestState::Rejected{command, reason} = state {
+                let mut buffer = [0u8; 2];
+                wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
+                info!("rejecting {} due to {}", command, reason);
+                stream.write(&buffer).await?;
+                break;
             }
         }
 
@@ -222,7 +200,6 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 async fn handle_connect_request(
     request: &ConnectRequest,
     accounts: &dyn AccountService,
-    state: &RequestState,
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     if request.build != 12340 {
@@ -282,12 +259,11 @@ async fn handle_connect_request(
     Ok(state)
 }
 
-#[instrument(skip(proof, accounts, token, state, stream))]
+#[instrument(skip(proof, accounts, token, stream))]
 async fn handle_connect_proof(
     proof: &ConnectProof,
     accounts: &dyn AccountService,
     token: &ConnectToken,
-    state: &RequestState,
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     let (state, response) = match accounts
@@ -323,7 +299,6 @@ async fn handle_connect_proof(
 async fn handle_reconnect_request(
     request: &ConnectRequest,
     accounts: &dyn AccountService,
-    state: &RequestState,
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     if request.build != 12340 {
@@ -371,12 +346,11 @@ async fn handle_reconnect_request(
     Ok(RequestState::ReconnectChallenge { token })
 }
 
-#[instrument(skip(proof, accounts, token, state, stream))]
+#[instrument(skip(proof, accounts, token, stream))]
 async fn handle_reconnect_proof(
     proof: &ReconnectProof,
     accounts: &dyn AccountService,
     token: &ReconnectToken,
-    state: &RequestState,
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     let (state, response) = match accounts
@@ -418,5 +392,5 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
     packet.extend_from_slice(&[0x10, 0x0]);
 
     stream.write(&packet).await?;
-    Ok(RequestState::Done)
+    Ok(RequestState::Realmlist)
 }
