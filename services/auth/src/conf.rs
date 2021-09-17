@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthServerConfig {
     pub bind_address: Ipv4Addr,
-    pub port: u32,
+    pub port: u16,
+    pub api_port: Option<u16>,
 
     pub login_database: String,
 }

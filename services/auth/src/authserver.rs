@@ -1,8 +1,7 @@
 use std::{fmt, net::Ipv4Addr, str};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use async_std::{
-    channel::{Receiver, Sender},
     net::{TcpListener, TcpStream},
     prelude::*,
     stream::StreamExt,
@@ -26,29 +25,6 @@ use crate::{
     },
     wow_bincode::wow_bincode,
 };
-
-/// Messages to the UI from the server
-#[derive(PartialEq, Display, Debug)]
-pub enum ServerMessage {
-    Ready,
-    Update(String),
-    Complete(String),
-    Error(String),
-}
-
-/// Messages to the server
-#[derive(PartialEq, Eq)]
-pub enum Command {
-    NewAccount {
-        /// The username of the new account
-        username: String,
-        /// The password to use
-        password: String,
-        /// The email address
-        email: String,
-    },
-    ShutDown,
-}
 
 /// Models the various valid states of the server.
 #[derive(Derivative, Display)]
@@ -102,8 +78,6 @@ impl RequestState {
 /// Implements a WoW authentication server.
 #[derive(Debug)]
 pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
-    pub command_receiver: Receiver<Command>,
-    pub reply_sender: Sender<ServerMessage>,
     pub accounts: T,
     pub realms: R,
 }
@@ -111,15 +85,11 @@ pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
 impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     /// Start the server, handling requests on the provided host and port.
     #[instrument(skip(self))]
-    pub async fn start(&self, host: Ipv4Addr, port: u32) -> Result<()> {
+    pub async fn start(&self, host: Ipv4Addr, port: u16) -> Result<()> {
         let addr = format!("{}:{}", host, port);
         let listener = TcpListener::bind(&addr).await?;
 
         info!("listening on {}", &addr);
-        self.reply_sender
-            .send(ServerMessage::Ready)
-            .await
-            .context("Couldn't send Authserver ready message")?;
 
         let mut connections = listener.incoming().filter_map(|s| s.ok());
         while let Some(mut stream) = connections.next().await {

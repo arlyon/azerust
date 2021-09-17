@@ -18,4 +18,4 @@ RUN cargo build --bin auth --release
 
 FROM scratch as auth
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/auth /auth
-CMD ["/auth", "log"]
+CMD ["/auth", "run"]

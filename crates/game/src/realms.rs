@@ -8,6 +8,7 @@ use derive_more::{From, Into};
 use enumflags2::bitflags;
 use num_enum::IntoPrimitive;
 use sqlx::Type;
+use strum_macros::ToString;
 
 /// The various flags that a realm can have.
 /// They are implemented as BitFlags.
@@ -28,7 +29,7 @@ pub enum RealmFlags {
 /// The various types of realm.
 /// For more, see <https://wow.tools/dbc/?dbc=cfg_configs&build=3.3.5.12340>
 #[repr(u8)]
-#[derive(Clone, Copy, Type, Debug, IntoPrimitive)]
+#[derive(Clone, Copy, Type, Debug, IntoPrimitive, ToString)]
 pub enum RealmType {
     Normal = 0,
     PVP = 1,

@@ -14,25 +14,26 @@
 
 use std::{net::Ipv4Addr, time::Duration};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use async_std::prelude::*;
 use conf::AuthServerConfig;
 use game::accounts::AccountService;
 use human_panic::setup_panic;
 use mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
+use sqlx::MySqlPool;
 use structopt::StructOpt;
+use tide::api;
 use tracing::debug;
 
 use crate::{
     authserver::AuthServer,
     opt::{AccountCommand, Opt},
-    ui::{Repl, Tui, UI},
 };
 
 mod authserver;
 mod conf;
 mod opt;
 mod protocol;
-mod ui;
 mod wow_bincode;
 
 #[async_std::main]
@@ -53,7 +54,8 @@ async fn main() -> Result<()> {
                         email,
                     },
             } => {
-                let accounts = MySQLAccountService::new(&config?.login_database).await?;
+                let pool = MySqlPool::connect(&config?.login_database).await?;
+                let accounts = MySQLAccountService::new(pool).await?;
                 match accounts.create_account(&username, &password, &email).await {
                     Ok(id) => println!("created account {}", id),
                     Err(e) => eprintln!("failed to create account: {}", e),
@@ -65,53 +67,43 @@ async fn main() -> Result<()> {
             let auth = AuthServerConfig {
                 bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
+                api_port: None,
                 login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
             auth.write(&opts.config).await?;
         }
-        opt::OptCommand::Tui => start_server(opts, Some(Tui {}), &config?).await?,
-        opt::OptCommand::Repl => start_server(opts, Some(Repl {}), &config?).await?,
-        opt::OptCommand::Log => start_server::<Repl>(opts, None, &config?).await?,
+        opt::OptCommand::Run => start_server(&config?).await?,
     };
 
     Ok(())
 }
 
-async fn start_server<U: 'static + UI + Send>(
-    _opts: Opt,
-    _ui: Option<U>,
-    config: &AuthServerConfig,
-) -> Result<()> {
-    let (_command_sender, command_receiver) =
-        async_std::channel::bounded::<authserver::Command>(10);
-    let (reply_sender, _reply_receiver) =
-        async_std::channel::bounded::<authserver::ServerMessage>(10);
-
-    // let e1 = thread::spawn(move || match ui {
-    //     Some(ui) => task::block_on(async {
-    //         ui.start(&command_sender, &reply_receiver).await.unwrap();
-    //         command_sender
-    //             .send(authserver::Command::ShutDown)
-    //             .await
-    //             .unwrap();
-    //     }),
-    //     None => task::block_on(async {
-    //         loop {
-    //             reply_receiver.recv().await;
-    //         }
-    //     }),
-    // });
+async fn start_server(config: &AuthServerConfig) -> Result<()> {
+    let pool = MySqlPool::connect(&config.login_database).await?;
 
     debug!("Loaded config {:?}", config);
-    let accounts = MySQLAccountService::new(&config.login_database).await?;
-    let realms = MySQLRealmList::new(&config.login_database, Duration::from_secs(60)).await?;
+    let accounts = MySQLAccountService::new(pool.clone()).await?;
+    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(60)).await?;
 
-    AuthServer {
-        command_receiver,
-        reply_sender,
-        accounts,
-        realms,
+    let server = AuthServer {
+        accounts: accounts.clone(),
+        realms: realms.clone(),
+    };
+
+    let run = server.start(config.bind_address, config.port);
+
+    if let Some(api_port) = config.api_port {
+        let api = api(
+            (config.bind_address.to_string(), api_port),
+            accounts.clone(),
+            realms.clone(),
+        );
+
+        run.try_join(async { api.await.map_err(|e| anyhow!(e)) })
+            .await?;
+    } else {
+        run.await?;
     }
-    .start(config.bind_address, config.port)
-    .await
+
+    Ok(())
 }

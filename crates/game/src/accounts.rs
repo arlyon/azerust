@@ -4,6 +4,7 @@
 //! of accounts such as login and creation / deletion.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use derive_more::Display;
 use rand::Rng;
 use sha1::Digest;
@@ -21,9 +22,14 @@ pub struct AccountId(pub u32);
 pub struct Account {
     pub id: AccountId,
     pub username: String,
+    pub email: String,
     pub salt: Salt,
     pub verifier: Verifier,
     pub ban_status: Option<BanStatus>,
+
+    pub joindate: DateTime<Utc>,
+    pub last_login: Option<DateTime<Utc>>,
+    pub online: u8,
 }
 
 /// Models the status of someone's ban.
@@ -132,6 +138,8 @@ impl ReconnectToken {
 /// An account service handles all the business logic for accounts.
 #[async_trait]
 pub trait AccountService {
+    async fn list_account(&self) -> Result<Vec<Account>, AccountFetchError>;
+
     /// Creates a new account in the system.
     async fn create_account(
         &self,
@@ -176,6 +184,12 @@ pub enum AccountOpError {
     PasswordTooLong,
     PersistError(String),
     InvalidAccount(AccountId),
+}
+
+/// Errors that may occur when accessing accounts.
+#[derive(Error, Debug, Display)]
+pub enum AccountFetchError {
+    IO(String),
 }
 
 /// Errors that may occur when logging in.

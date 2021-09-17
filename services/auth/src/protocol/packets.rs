@@ -323,6 +323,7 @@ impl ReplyPacket<()> {
 #[cfg(test)]
 mod test {
     use bincode::Options;
+    use chrono::Utc;
     use game::accounts::{Account, AccountId};
     use test_case::test_case;
     use wow_srp::{Salt, Verifier, WowSRPServer};
@@ -418,6 +419,11 @@ mod test {
                 0x92, 0xd0, 0x5c, 0x88,
             ]),
             ban_status: None,
+
+            email: "".to_string(),
+            joindate: Utc::now(),
+            last_login: None,
+            online: 0,
         };
 
         let server = WowSRPServer::new(&account.username, account.salt, account.verifier);

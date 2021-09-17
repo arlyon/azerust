@@ -1,25 +1,30 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use async_std::{prelude::FutureExt, sync::RwLock};
 use async_trait::async_trait;
 use game::realms::{Realm, RealmList};
+use sqlx::MySqlPool;
 use tracing::debug;
 
+#[derive(Clone)]
 pub struct MySQLRealmList {
-    next_update: RwLock<SystemTime>,
+    next_update: Arc<RwLock<SystemTime>>,
     update_interval: Duration,
     pool: sqlx::MySqlPool,
-    realms: RwLock<Vec<Realm>>,
+    realms: Arc<RwLock<Vec<Realm>>>,
 }
 
 impl MySQLRealmList {
-    pub async fn new(connect: &str, update_interval: Duration) -> Result<Self, sqlx::Error> {
+    pub async fn new(pool: MySqlPool, update_interval: Duration) -> Result<Self, sqlx::Error> {
         debug!("Starting realmlist service");
         Ok(Self {
-            pool: sqlx::MySqlPool::connect(connect).await?,
+            pool,
             update_interval,
-            next_update: RwLock::new(SystemTime::now()),
-            realms: RwLock::new(vec![]),
+            next_update: Arc::new(RwLock::new(SystemTime::now())),
+            realms: Arc::new(RwLock::new(vec![])),
         })
     }
 }

@@ -14,12 +14,8 @@ pub struct Opt {
 pub enum OptCommand {
     /// Execute a command directly.
     Exec(Command),
-    /// Run the server with a tui.
-    Tui,
-    /// Run the server with a repl.
-    Repl,
-    /// Run the server just viewing logs.
-    Log,
+    /// Run the server.
+    Run,
     /// Generate a new config file.
     Init,
 }

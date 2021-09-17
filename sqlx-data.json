@@ -1,5 +1,263 @@
 {
   "db": "MySQL",
+  "067221deb069157e8b4bc7e65ebc308634fe1457f27b4a67d7345836e912df14": {
+    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE username = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "username",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "salt: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "verifier: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "email",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "joindate",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 1153
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "last_login",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "ban_status: _",
+          "type_info": {
+            "type": "Null",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 0
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "online",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false
+      ]
+    }
+  },
+  "0ed0c655f2aaa7cf2b516eeb3ed9e583e1089b60dea8971bd48dcd71ec6dda16": {
+    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online from account",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "username",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "salt: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "verifier: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "email",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "joindate",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 1153
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "last_login",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "ban_status: _",
+          "type_info": {
+            "type": "Null",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 0
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "online",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false
+      ]
+    }
+  },
   "2b2e8132419fcae71505ca06bfacc0c1a86a3f53c356fc84eef34a253a5ddb4a": {
     "query": "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?",
     "describe": {
@@ -197,83 +455,6 @@
       },
       "nullable": [
         false
-      ]
-    }
-  },
-  "d1d17d057c3f81550673cb3a6c27abcae76cda6572e5640219ca560f820ee351": {
-    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", NULL as \"ban_status: _\" FROM account WHERE username = ?",
-    "describe": {
-      "columns": [
-        {
-          "ordinal": 0,
-          "name": "id: _",
-          "type_info": {
-            "type": "Long",
-            "flags": {
-              "bits": 547
-            },
-            "char_set": 63,
-            "max_size": 10
-          }
-        },
-        {
-          "ordinal": 1,
-          "name": "username",
-          "type_info": {
-            "type": "VarString",
-            "flags": {
-              "bits": 5
-            },
-            "char_set": 224,
-            "max_size": 128
-          }
-        },
-        {
-          "ordinal": 2,
-          "name": "salt: _",
-          "type_info": {
-            "type": "String",
-            "flags": {
-              "bits": 4225
-            },
-            "char_set": 63,
-            "max_size": 32
-          }
-        },
-        {
-          "ordinal": 3,
-          "name": "verifier: _",
-          "type_info": {
-            "type": "String",
-            "flags": {
-              "bits": 4225
-            },
-            "char_set": 63,
-            "max_size": 32
-          }
-        },
-        {
-          "ordinal": 4,
-          "name": "ban_status: _",
-          "type_info": {
-            "type": "Null",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 0
-          }
-        }
-      ],
-      "parameters": {
-        "Right": 1
-      },
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        true
       ]
     }
   },

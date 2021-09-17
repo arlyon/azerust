@@ -1,13 +1,15 @@
 use std::convert::TryInto;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use game::{
     accounts::{
-        Account, AccountId, AccountOpError, AccountService, BanStatus, ConnectToken, LoginFailure,
-        ReconnectToken,
+        Account, AccountFetchError, AccountId, AccountOpError, AccountService, BanStatus,
+        ConnectToken, LoginFailure, ReconnectToken,
     },
     types::Locale,
 };
+use sqlx::MySqlPool;
 use tracing::{debug, error, instrument};
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
@@ -17,16 +19,21 @@ pub struct MySQLAccountService {
 }
 
 impl MySQLAccountService {
-    pub async fn new(connect: &str) -> Result<Self, sqlx::Error> {
+    pub async fn new(pool: MySqlPool) -> Result<Self, sqlx::Error> {
         debug!("Starting accounts service");
-        Ok(Self {
-            pool: sqlx::MySqlPool::connect(connect).await?,
-        })
+        Ok(Self { pool })
     }
 }
 
 #[async_trait]
 impl AccountService for MySQLAccountService {
+    async fn list_account(&self) -> Result<Vec<Account>, AccountFetchError> {
+        sqlx::query_as!(Account, r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online from account"#)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AccountFetchError::IO(e.to_string()))
+    }
+
     #[instrument(skip(self))]
     async fn create_account(
         &self,
@@ -99,7 +106,7 @@ impl AccountService for MySQLAccountService {
     async fn get_account(&self, username: &str) -> Result<Account, AccountOpError> {
         sqlx::query_as!(
             Account,
-            r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", NULL as "ban_status: _" FROM account WHERE username = ?"#,
+            r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE username = ?"#,
             username
         )
         .fetch_one(&self.pool)
@@ -151,6 +158,12 @@ impl AccountService for MySQLAccountService {
             salt: Salt([0u8; 32]),
             verifier: Verifier([0u8; 32]),
             ban_status,
+
+            // todo(arlyon): fill in
+            email: "".to_string(),
+            online: 0,
+            joindate: Utc::now(),
+            last_login: None,
         };
 
         // get session key
