@@ -1,3 +1,5 @@
+#![feature(hash_drain_filter)]
+
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
@@ -14,7 +16,7 @@
 
 use std::{net::Ipv4Addr, time::Duration};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_std::prelude::*;
 use azerust_game::accounts::AccountService;
 use azerust_mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
@@ -82,14 +84,12 @@ async fn start_server(config: &AuthServerConfig) -> Result<()> {
     let pool = MySqlPool::connect(&config.login_database).await?;
 
     debug!("Loaded config {:?}", config);
-    let accounts = MySQLAccountService::new(pool.clone()).await?;
-    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(60)).await?;
+    let (accounts, realms) = MySQLAccountService::new(pool.clone())
+        .try_join(MySQLRealmList::new(pool.clone(), Duration::from_secs(60)))
+        .await
+        .context("could not start the database services")?;
 
-    let server = AuthServer {
-        accounts: accounts.clone(),
-        realms: realms.clone(),
-    };
-
+    let server = AuthServer::new(accounts.clone(), realms.clone());
     let run = server.start(config.bind_address, config.port);
 
     if let Some(api_port) = config.api_port {

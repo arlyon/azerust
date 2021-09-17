@@ -63,4 +63,6 @@ pub struct Realm {
 pub trait RealmList {
     /// Return the list of realms sorted by id.
     async fn realms(&self) -> Vec<Realm>;
+
+    async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> ();
 }

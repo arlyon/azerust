@@ -1,14 +1,30 @@
+use anyhow::{Context, Result};
+use async_std::{net::Ipv4Addr, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-struct AuthServerConfig {
-    bind_address: IpAddress,
-    port: u32,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorldServerConfig {
+    pub bind_address: Ipv4Addr,
+    pub port: u32,
 
-    character_database: String,
-    login_database: String,
-    world_database: String,
+    pub auth_server_address: String,
 
-    realm_id: u32,
-    data_dir: u32,
+    pub character_database: String,
+    pub login_database: String,
+    pub world_database: String,
+
+    pub realm_id: u8,
+    pub data_dir: u32,
+}
+
+impl WorldServerConfig {
+    pub async fn read(path: &PathBuf) -> Result<Self> {
+        let file = std::fs::File::open(path)?;
+        serde_yaml::from_reader(file).context("could not read yaml file")
+    }
+
+    pub async fn write(&self, path: &PathBuf) -> Result<()> {
+        let file = std::fs::File::create(path)?;
+        serde_yaml::to_writer(file, self).context("could not write yaml file")
+    }
 }

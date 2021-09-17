@@ -5,7 +5,7 @@ use std::{
 
 use async_std::{prelude::FutureExt, sync::RwLock};
 use async_trait::async_trait;
-use azerust_game::realms::{Realm, RealmList};
+use azerust_game::realms::{Realm, RealmFlags, RealmList};
 use sqlx::MySqlPool;
 use tracing::debug;
 
@@ -48,5 +48,14 @@ impl RealmList for MySQLRealmList {
         };
 
         self.realms.read().await.clone()
+    }
+
+    async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> () {
+        for (id, flag) in online {
+            sqlx::query!(
+                "insert into realmlist(id, flag) values(?, ?) on duplicate key update flag = values(`flag`)",
+                id, flag as u8
+            ).execute(&self.pool).await;
+        }
     }
 }

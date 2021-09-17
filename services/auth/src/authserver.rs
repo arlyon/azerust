@@ -1,19 +1,26 @@
-use std::{fmt, net::Ipv4Addr, str};
+use std::{
+    collections::HashMap,
+    fmt,
+    net::Ipv4Addr,
+    str,
+    time::{self, Instant},
+};
 
 use anyhow::{anyhow, Result};
 use async_std::{
     net::{TcpListener, TcpStream},
     prelude::*,
-    stream::StreamExt,
+    stream::{self, StreamExt},
+    sync::RwLock,
 };
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
-    realms::RealmList,
+    realms::{RealmFlags, RealmList},
 };
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
 
 use crate::{
     protocol::{
@@ -78,24 +85,91 @@ impl RequestState {
 /// Implements a WoW authentication server.
 #[derive(Debug)]
 pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
-    pub accounts: T,
-    pub realms: R,
+    accounts: T,
+    realms: R,
+    heartbeat: RwLock<HashMap<u8, Instant>>,
 }
 
 impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
+    pub fn new(accounts: T, realms: R) -> Self {
+        Self {
+            accounts,
+            realms,
+            heartbeat: RwLock::new(HashMap::new()),
+        }
+    }
+
     /// Start the server, handling requests on the provided host and port.
-    #[instrument(skip(self))]
     pub async fn start(&self, host: Ipv4Addr, port: u16) -> Result<()> {
-        let addr = format!("{}:{}", host, port);
+        self.authentication(host, port)
+            .try_join(self.world_server_heartbeat(host))
+            .try_join(self.realmlist_updater())
+            .await
+            .map(|_| ())
+    }
+
+    #[instrument(skip(self, host))]
+    async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
+        // todo(arlyon): change the world server listen port
+        let socket = async_std::net::UdpSocket::bind((host, 1234)).await?;
+
+        let mut buffer = [0u8; 6];
+        loop {
+            if let Err(_) = socket.recv(&mut buffer).await {
+                debug!("received larger packet than expected");
+                continue;
+            };
+            match wow_bincode().deserialize(&buffer) {
+                Ok((0u8, realm_id, realm_pop)) => {
+                    self.heartbeat
+                        .write()
+                        .await
+                        .insert(realm_id, Instant::now());
+                    trace!(
+                        "got heartbeat for {} with realm pop {}",
+                        realm_id,
+                        realm_pop
+                    )
+                }
+                Ok((_, _, 0u32)) | _ => debug!("received bad buffer: {:02X?}", &buffer),
+            }
+        }
+    }
+
+    /// updates the realmlist based on recently received heartbeats
+    #[instrument(skip(self))]
+    async fn realmlist_updater(&self) -> Result<()> {
+        let instant = stream::from_fn(|| Some(Instant::now()));
+        let mut interval = stream::interval(time::Duration::from_secs(5)).zip(instant);
+        while let Some((_, now)) = interval.next().await {
+            let data = {
+                let mut write = self.heartbeat.write().await;
+                let mut data = Vec::with_capacity(write.len());
+                data.extend(
+                    write
+                        .drain_filter(|_, v| now.duration_since(*v).as_secs() > 15)
+                        .map(|(k, _)| (k, RealmFlags::Offline)),
+                );
+                data.extend(write.keys().map(|&k| (k, RealmFlags::Recommended)));
+                data
+            };
+            trace!("updating realm populations: {:?}", data);
+            self.realms.update_status(data).await;
+        }
+        Ok(())
+    }
+
+    #[instrument(skip(self, host, port))]
+    async fn authentication(&self, host: Ipv4Addr, port: u16) -> Result<()> {
+        let addr = (host, port);
         let listener = TcpListener::bind(&addr).await?;
 
-        info!("listening on {}", &addr);
+        info!("listening on {:?}", &addr);
 
         let mut connections = listener.incoming().filter_map(|s| s.ok());
         while let Some(mut stream) = connections.next().await {
-            match self.connect_loop(&mut stream).await {
-                Ok(_) => {}
-                Err(e) => error!("error handling request: {}", e),
+            if let Err(e) = self.connect_loop(&mut stream).await {
+                error!("error handling request: {}", e)
             }
         }
 

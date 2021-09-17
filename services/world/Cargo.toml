@@ -8,3 +8,16 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
+async-std = { version = "1", features = ["unstable", "async-channel", "attributes"] }
+human-panic = "1"
+structopt = "0.3"
+tracing = "0.1"
+azerust-game = { path = "../../crates/game" }
+azerust-mysql = { path = "../../crates/mysql" }
+serde = "1"
+serde_yaml = "0.8"
+sqlx = { version = "0.5", features = ["runtime-async-std-rustls", "chrono"] }
+tracing-subscriber = "0.2"
+bincode = "2.0.0-dev"
+num_enum = "0.5.4"

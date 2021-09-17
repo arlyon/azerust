@@ -6,7 +6,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-async-std = { version = "1.8", features = ["unstable", "async-channel", "attributes"] }
+async-std = { version = "1", features = ["unstable", "async-channel", "attributes"] }
 async-trait = "0.1"
 sqlx = { version = "0.5", features = ["runtime-async-std-rustls", "mysql", "offline"] }
 
