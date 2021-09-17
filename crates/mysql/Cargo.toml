@@ -3,11 +3,11 @@ name = "mysql"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 sqlx = { version = "0.5", features = ["mysql"] }
 tracing = "0.1"
-tracing-futures = "0.2"
 async-trait = "0.1"
 wow-srp = { path = "../wow-srp" }
 game = { path = "../game" }

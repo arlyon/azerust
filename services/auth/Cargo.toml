@@ -3,6 +3,7 @@ name = "auth"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 async-std = { version = "1.8", features = ["unstable", "async-channel", "attributes"] }
@@ -21,7 +22,6 @@ thiserror = "1"
 human-panic = "1"
 
 num_enum = "0.5"
-rustyline = "9"
 static_assertions = "1"
 assert-size-attribute = { path = "../../crates/assert-size-attribute" }
 structopt = "0.3"
@@ -31,11 +31,6 @@ num-bigint = "0.4"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.2", features = ["tracing-log"] }
-tracing-futures = "0.2"
-
-colored = "2"
-termion = "1"
-tui = "0.16"
 
 wow-srp = { path = "../../crates/wow-srp" }
 game = { path = "../../crates/game" }

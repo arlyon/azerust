@@ -3,9 +3,9 @@ name = "game"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-arrayvec = "0.7"
 async-trait = "0.1"
 chrono = "0.4.19"
 derive_more = "0.99"
