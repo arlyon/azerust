@@ -10,12 +10,22 @@ FROM chef as cacher
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release
 
-FROM chef as builder
+FROM chef as auth-builder
 COPY . .
 COPY --from=cacher /app/target target
 ENV SQLX_OFFLINE true
 RUN cargo build --bin azerust-auth --release
 
+FROM chef as world-builder
+COPY . .
+COPY --from=cacher /app/target target
+ENV SQLX_OFFLINE true    
+RUN cargo build --bin azerust-world --release
+
 FROM scratch as auth
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/azerust-auth /auth
+COPY --from=auth-builder /app/target/x86_64-unknown-linux-musl/release/azerust-auth /auth
 CMD ["/auth", "run"]
+
+FROM scratch as world
+COPY --from=world-builder /app/target/x86_64-unknown-linux-musl/release/azerust-world /world
+CMD ["/world"]

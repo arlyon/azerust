@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   auth:
-    image: arlyon/azerust-auth
+    image: ghcr.io/arlyon/azerust-auth:master
     build:
       context: .
     depends_on: [database]
@@ -12,6 +12,7 @@ services:
       - ./config-compose.yaml:/config.yaml:Z
     ports:
       - "3724:3724"
+      - "8000:8000"
   database:
     image: "mysql:5.7"
     environment:
