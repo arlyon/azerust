@@ -1,7 +1,10 @@
 use assert_size_attribute::assert_eq_size;
+use azerust_game::{
+    accounts::{ConnectToken, LoginFailure},
+    realms,
+};
 use bincode::Options;
 use derive_more::Display;
-use game::accounts::{ConnectToken, LoginFailure};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use thiserror::Error;
@@ -274,7 +277,7 @@ pub struct Realm {
 }
 
 impl Realm {
-    pub fn from_realm(r: &game::realms::Realm, character_count: u8, locked: bool) -> Self {
+    pub fn from_realm(r: &realms::Realm, character_count: u8, locked: bool) -> Self {
         Self {
             realm_type: r.realm_type.into(),
             locked,
@@ -322,9 +325,9 @@ impl ReplyPacket<()> {
 
 #[cfg(test)]
 mod test {
+    use azerust_game::accounts::{Account, AccountId};
     use bincode::Options;
     use chrono::Utc;
-    use game::accounts::{Account, AccountId};
     use test_case::test_case;
     use wow_srp::{Salt, Verifier, WowSRPServer};
 

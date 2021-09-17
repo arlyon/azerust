@@ -1,8 +1,8 @@
 use std::io;
 
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use game::{accounts::AccountService, realms::RealmList};
-use graphql::create_schema;
+use azerust_game::{accounts::AccountService, realms::RealmList};
+use azerust_graphql::create_schema;
 use tide::{http::mime, listener::ToListener, Body, Response, StatusCode};
 
 pub async fn api<

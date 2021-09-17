@@ -1,5 +1,5 @@
 [package]
-name = "graphql"
+name = "azerust-graphql"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
@@ -12,4 +12,4 @@ async-graphql = {version = "2.9", features = ["chrono"] }
 sqlx = {version = "0.5", features = ["macros", "chrono"] }
 chrono = "0.4"
 
-game = {path = "../game"}
+azerust-game = {path = "../game"}

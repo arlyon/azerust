@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use async_graphql::{Context, FieldResult, Object};
-use game::{accounts::AccountService, realms::RealmList};
+use azerust_game::{accounts::AccountService, realms::RealmList};
 
 use crate::models::{Account, Realm};
 

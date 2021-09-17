@@ -1,5 +1,5 @@
 [package]
-name = "mysql"
+name = "azerust-mysql"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"
@@ -10,7 +10,7 @@ sqlx = { version = "0.5", features = ["mysql"] }
 tracing = "0.1"
 async-trait = "0.1"
 wow-srp = { path = "../wow-srp" }
-game = { path = "../game" }
+azerust-game = { path = "../game" }
 lazy_static = "1.4"
 rand = "0.8"
 async-std = "1.8"

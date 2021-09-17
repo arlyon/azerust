@@ -1,6 +1,7 @@
 use async_graphql::Object;
+use azerust_game::realms;
 
-pub struct Realm(pub game::realms::Realm);
+pub struct Realm(pub realms::Realm);
 
 #[Object]
 impl Realm {

@@ -274,7 +274,7 @@ dependencies = [
  "async-trait",
  "futures-util",
  "serde_json",
- "tide 0.16.0",
+ "tide",
  "tide-websockets",
 ]
 
@@ -514,39 +514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "auth"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert-size-attribute",
- "async-std",
- "async-trait",
- "bincode 2.0.0-dev",
- "chrono",
- "derivative",
- "derive_more",
- "enumflags2",
- "game",
- "human-panic",
- "lazy_static",
- "mysql",
- "num-bigint 0.4.2",
- "num_enum",
- "rand 0.8.4",
- "serde",
- "serde_yaml",
- "sqlx",
- "static_assertions",
- "structopt",
- "test-case",
- "thiserror",
- "tide 0.1.0",
- "tracing",
- "tracing-subscriber",
- "wow-srp",
-]
-
-[[package]]
 name = "autocfg"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -557,6 +524,99 @@ name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
+
+[[package]]
+name = "azerust-auth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert-size-attribute",
+ "async-std",
+ "async-trait",
+ "azerust-game",
+ "azerust-mysql",
+ "azerust-tide",
+ "bincode 2.0.0-dev",
+ "chrono",
+ "derivative",
+ "derive_more",
+ "enumflags2",
+ "human-panic",
+ "lazy_static",
+ "num-bigint 0.4.2",
+ "num_enum",
+ "rand 0.8.4",
+ "serde",
+ "serde_yaml",
+ "sqlx",
+ "static_assertions",
+ "structopt",
+ "test-case",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "wow-srp",
+]
+
+[[package]]
+name = "azerust-game"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "derive_more",
+ "enumflags2",
+ "num_enum",
+ "rand 0.8.4",
+ "sha-1 0.9.8",
+ "sqlx",
+ "strum",
+ "strum_macros",
+ "thiserror",
+ "wow-srp",
+]
+
+[[package]]
+name = "azerust-graphql"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "azerust-game",
+ "chrono",
+ "sqlx",
+]
+
+[[package]]
+name = "azerust-mysql"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "azerust-game",
+ "chrono",
+ "lazy_static",
+ "rand 0.8.4",
+ "sha-1 0.9.8",
+ "sqlx",
+ "tracing",
+ "wow-srp",
+]
+
+[[package]]
+name = "azerust-tide"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "async-graphql-tide",
+ "azerust-game",
+ "azerust-graphql",
+ "sqlx",
+ "tide",
+]
+
+[[package]]
+name = "azerust-world"
+version = "0.1.0"
 
 [[package]]
 name = "backtrace"
@@ -1212,24 +1272,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "game"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "derive_more",
- "enumflags2",
- "num_enum",
- "rand 0.8.4",
- "sha-1 0.9.8",
- "sqlx",
- "strum",
- "strum_macros",
- "thiserror",
- "wow-srp",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1297,16 +1339,6 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "graphql"
-version = "0.1.0"
-dependencies = [
- "async-graphql",
- "chrono",
- "game",
- "sqlx",
 ]
 
 [[package]]
@@ -1643,22 +1675,6 @@ dependencies = [
  "spin 0.9.2",
  "twoway",
  "version_check",
-]
-
-[[package]]
-name = "mysql"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "async-trait",
- "chrono",
- "game",
- "lazy_static",
- "rand 0.8.4",
- "sha-1 0.9.8",
- "sqlx",
- "tracing",
- "wow-srp",
 ]
 
 [[package]]
@@ -2832,18 +2848,6 @@ dependencies = [
 
 [[package]]
 name = "tide"
-version = "0.1.0"
-dependencies = [
- "async-graphql",
- "async-graphql-tide",
- "game",
- "graphql",
- "sqlx",
- "tide 0.16.0",
-]
-
-[[package]]
-name = "tide"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c459573f0dd2cc734b539047f57489ea875af8ee950860ded20cf93a79a1dee0"
@@ -2880,7 +2884,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha-1 0.9.8",
- "tide 0.16.0",
+ "tide",
 ]
 
 [[package]]
@@ -3347,10 +3351,6 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
-
-[[package]]
-name = "world"
-version = "0.1.0"
 
 [[package]]
 name = "wow-srp"

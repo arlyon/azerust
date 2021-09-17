@@ -6,13 +6,13 @@ use async_std::{
     prelude::*,
     stream::StreamExt,
 };
-use bincode::Options;
-use derivative::Derivative;
-use derive_more::Display;
-use game::{
+use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::RealmList,
 };
+use bincode::Options;
+use derivative::Derivative;
+use derive_more::Display;
 use tracing::{debug, error, info, instrument};
 
 use crate::{

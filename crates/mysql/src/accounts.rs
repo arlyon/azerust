@@ -1,14 +1,14 @@
 use std::convert::TryInto;
 
 use async_trait::async_trait;
-use chrono::Utc;
-use game::{
+use azerust_game::{
     accounts::{
         Account, AccountFetchError, AccountId, AccountOpError, AccountService, BanStatus,
         ConnectToken, LoginFailure, ReconnectToken,
     },
     types::Locale,
 };
+use chrono::Utc;
 use sqlx::MySqlPool;
 use tracing::{debug, error, instrument};
 use wow_srp::{Salt, Verifier, WowSRPServer};

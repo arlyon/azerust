@@ -1,7 +1,8 @@
 use async_graphql::Object;
+use azerust_game::accounts;
 use chrono::{DateTime, Utc};
 
-pub struct Account(pub game::accounts::Account);
+pub struct Account(pub accounts::Account);
 
 #[Object]
 impl Account {

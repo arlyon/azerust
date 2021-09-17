@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use async_graphql::{Context, FieldResult, InputObject, Object};
-use game::accounts::AccountService;
+use azerust_game::accounts::AccountService;
 
 pub struct Mutation<T> {
     marker: PhantomData<T>,

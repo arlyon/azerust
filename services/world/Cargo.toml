@@ -1,5 +1,5 @@
 [package]
-name = "world"
+name = "azerust-world"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"

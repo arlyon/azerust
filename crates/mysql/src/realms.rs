@@ -5,7 +5,7 @@ use std::{
 
 use async_std::{prelude::FutureExt, sync::RwLock};
 use async_trait::async_trait;
-use game::realms::{Realm, RealmList};
+use azerust_game::realms::{Realm, RealmList};
 use sqlx::MySqlPool;
 use tracing::debug;
 
