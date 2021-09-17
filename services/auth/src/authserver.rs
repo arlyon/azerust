@@ -66,22 +66,6 @@ pub enum RequestState {
     Done,
 }
 
-impl RequestState {
-    fn reject_from(state: &Self, reason: ReturnCode) -> Self {
-        Self::Rejected {
-            command: match state {
-                RequestState::Start => AuthCommand::ConnectRequest,
-                RequestState::ConnectChallenge { .. } => AuthCommand::AuthLogonProof,
-                RequestState::Realmlist { .. } => AuthCommand::RealmList,
-                RequestState::Rejected { command, .. } => *command,
-                RequestState::Done => AuthCommand::RealmList,
-                RequestState::ReconnectChallenge { .. } => AuthCommand::AuthReconnectProof,
-            },
-            reason,
-        }
-    }
-}
-
 /// Implements a WoW authentication server.
 #[derive(Debug)]
 pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
@@ -242,10 +226,10 @@ async fn handle_connect_request(
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     if request.build != 12340 {
-        return Ok(RequestState::reject_from(
-            &state,
-            ReturnCode::VersionInvalid,
-        ));
+        return Ok(RequestState::Rejected {
+            command: AuthCommand::ConnectRequest,
+            reason: ReturnCode::VersionInvalid,
+        });
     };
 
     let mut buffer = [0u8; 16];
@@ -256,7 +240,10 @@ async fn handle_connect_request(
             Ok(s) => s,
             Err(e) => {
                 debug!("user connected with invalid username: {}", e);
-                return Ok(RequestState::reject_from(&state, ReturnCode::Failed));
+                return Ok(RequestState::Rejected {
+                    command: AuthCommand::ConnectRequest,
+                    reason: ReturnCode::Failed,
+                });
             }
         }
     };
@@ -266,7 +253,10 @@ async fn handle_connect_request(
     let (state, response) = match accounts.initiate_login(username).await {
         Ok(token) => (RequestState::ConnectChallenge { token }, token.into()),
         Err(reason) => {
-            return Ok(RequestState::reject_from(&state, reason.into()));
+            return Ok(RequestState::Rejected {
+                command: AuthCommand::ConnectRequest,
+                reason: reason.into(),
+            });
         }
     };
 
@@ -315,7 +305,10 @@ async fn handle_connect_proof(
             },
         ),
         Err(status) => {
-            return Ok(RequestState::reject_from(&state, status.into()));
+            return Ok(RequestState::Rejected {
+            command: AuthCommand::AuthLogonProof,
+            reason: status.into(),
+        });
         }
     };
 
@@ -334,10 +327,10 @@ async fn handle_reconnect_request(
     stream: &mut TcpStream,
 ) -> Result<RequestState> {
     if request.build != 12340 {
-        return Ok(RequestState::reject_from(
-            &state,
-            ReturnCode::VersionInvalid,
-        ));
+        return Ok(RequestState::Rejected {
+            command: AuthCommand::AuthReconnectChallenge,
+            reason: ReturnCode::VersionInvalid,
+        });
     }
 
     let mut buffer = [0u8; 16];
@@ -348,14 +341,22 @@ async fn handle_reconnect_request(
             Ok(s) => s,
             Err(e) => {
                 debug!("user connected with invalid username: {}", e);
-                return Ok(RequestState::reject_from(&state, ReturnCode::Failed));
+                return Ok(RequestState::Rejected {
+                    command: AuthCommand::AuthReconnectChallenge,
+                    reason: ReturnCode::Failed,
+                });
             }
         }
     };
 
     let token = match accounts.initiate_relogin(username).await {
         Ok(token) => token,
-        Err(e) => return Ok(RequestState::reject_from(state, e.into())),
+        Err(e) => {
+            return Ok(RequestState::Rejected {
+                command: AuthCommand::AuthReconnectChallenge,
+                reason: e.into(),
+            })
+        }
     };
 
     stream
@@ -387,7 +388,10 @@ async fn handle_reconnect_proof(
             (AuthCommand::AuthReconnectProof, ReturnCode::Success, 0u16),
         ),
         Err(status) => {
-            return Ok(RequestState::reject_from(&state, status.into()));
+            return Ok(RequestState::Rejected {
+                command: AuthCommand::AuthReconnectChallenge,
+                reason: status.into(),
+            });
         }
     };
 
