@@ -204,6 +204,7 @@ impl WowSRPServer {
         let u = BigUint::from_bytes_le(&a_b);
         let premaster_secret = (&a_pub_num * verifier.modpow(&u, &N)).modpow(&b, &N);
 
+        // todo(arlyon): this can panic
         let session_key = WowSRPServer::derive_session_key(
             &premaster_secret
                 .to_bytes_le()
@@ -240,11 +241,11 @@ impl WowSRPServer {
     fn calculate_b_pub(b: &[u8; 32], v: &Verifier) -> [u8; 32] {
         let fst = G.modpow(&BigUint::from_bytes_be(b), &N);
         let snd = BigUint::from(v) * BigUint::from(3u8);
-        let b_pub = ((fst + snd) % &*N)
+
+        ((fst + snd) % &*N)
             .to_bytes_le()
             .try_into()
-            .expect("correct size");
-        b_pub
+            .expect("correct size")
     }
 
     /// Calculates the session key by running it through a SHA1 interleave.
@@ -311,7 +312,7 @@ mod test {
         ];
 
         let server = WowSRPServer::new_with_b(
-            &"ARLYON",
+            "ARLYON",
             Salt([
                 224, 222, 178, 127, 204, 184, 244, 126, 70, 90, 69, 35, 84, 22, 9, 131, 253, 198,
                 54, 56, 240, 56, 90, 214, 234, 20, 89, 54, 177, 3, 71, 245,

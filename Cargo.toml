@@ -2,5 +2,5 @@
 members = ["crates/*", "services/*"]
 
 [patch.crates-io]
-sqlx = {git = "https://github.com/arlyon/sqlx.git"}
-bincode = {git = "https://github.com/arlyon/bincode.git", branch = "arlyon/null-str-encoding"}
+sqlx = { git = "https://github.com/arlyon/sqlx.git" }
+bincode = { git = "https://github.com/arlyon/bincode.git", branch = "arlyon/null-str-encoding" }

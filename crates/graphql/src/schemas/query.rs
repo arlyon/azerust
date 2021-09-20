@@ -28,7 +28,7 @@ where
     async fn get_users(&self, ctx: &Context<'_>) -> FieldResult<Vec<Account>> {
         let service = ctx.data::<A>()?;
         let accounts = service.list_account().await?;
-        Ok(accounts.into_iter().map(|a| Account(a)).collect())
+        Ok(accounts.into_iter().map(Account).collect())
     }
 
     async fn get_user(&self, ctx: &Context<'_>, username: String) -> FieldResult<Account> {
@@ -39,11 +39,6 @@ where
 
     async fn get_realms(&self, ctx: &Context<'_>) -> FieldResult<Vec<Realm>> {
         let service = ctx.data::<R>()?;
-        Ok(service
-            .realms()
-            .await
-            .into_iter()
-            .map(|r| Realm(r))
-            .collect())
+        Ok(service.realms().await.into_iter().map(Realm).collect())
     }
 }

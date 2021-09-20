@@ -17,6 +17,7 @@ use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
 };
+use azerust_protocol::auth::{AuthCommand, ReturnCode};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
@@ -25,8 +26,8 @@ use tracing::{debug, error, info, instrument, trace};
 use crate::{
     protocol::{
         packets::{
-            AuthCommand, ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest,
-            Realm, RealmListResponse, ReconnectProof, ReplyPacket, ReturnCode, VERSION_CHALLENGE,
+            ConnectChallenge, ConnectProof, ConnectProofResponse, ConnectRequest, Realm,
+            RealmListResponse, ReconnectProof, ReplyPacket, VERSION_CHALLENGE,
         },
         read_packet, Message,
     },
@@ -96,7 +97,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
         let mut buffer = [0u8; 6];
         loop {
-            if let Err(_) = socket.recv(&mut buffer).await {
+            if socket.recv(&mut buffer).await.is_err() {
                 debug!("received larger packet than expected");
                 continue;
             };
@@ -159,11 +160,10 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
     #[instrument(skip(self, stream))]
     async fn connect_loop(&self, stream: &mut TcpStream) -> Result<()> {
-        let mut reader = stream.clone();
         let mut state = RequestState::Start;
 
         loop {
-            let message = read_packet(&mut reader).await?;
+            let message = read_packet(stream).await?;
             debug!("received message {} in state {}", message, state);
             state = match (state, message) {
                 (_, Message::ConnectRequest(r)) => {
@@ -178,15 +178,19 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 (RequestState::ReconnectChallenge { token }, Message::ReconnectProof(proof)) => {
                     handle_reconnect_proof(&proof, &self.accounts, &token, stream).await?
                 }
-                (RequestState::Realmlist, Message::RealmList(_)) => handle_realmlist(&self.realms, stream).await?,
-                (_, Message::ConnectProof(_) | Message::ReconnectProof(_)) => return Err(anyhow!("received proof before request, closing connection")),
+                (RequestState::Realmlist, Message::RealmList(_)) => {
+                    handle_realmlist(&self.realms, stream).await?
+                }
+                (_, Message::ConnectProof(_) | Message::ReconnectProof(_)) => {
+                    return Err(anyhow!("received proof before request, closing connection"))
+                }
                 _ => return Err(anyhow!("received message in bad state, closing connection")),
             };
 
-            if let RequestState::Rejected{command, reason} = state {
+            if let RequestState::Rejected { command, reason } = state {
                 let mut buffer = [0u8; 2];
                 wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
-                info!("rejecting {} due to {}", command, reason);
+                info!("rejecting {:?} due to {:?}", command, reason);
                 stream.write(&buffer).await?;
                 break;
             }
@@ -282,9 +286,9 @@ async fn handle_connect_proof(
         ),
         Err(status) => {
             return Ok(RequestState::Rejected {
-            command: AuthCommand::AuthLogonProof,
-            reason: status.into(),
-        });
+                command: AuthCommand::AuthLogonProof,
+                reason: status.into(),
+            });
         }
     };
 
@@ -380,7 +384,7 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
         .realms()
         .await
         .iter()
-        .map(|r| Realm::from_realm(&r, 0, false))
+        .map(|r| Realm::from_realm(r, 0, false))
         .collect::<Vec<_>>();
 
     let resp = RealmListResponse::from_realms(&realms)?;

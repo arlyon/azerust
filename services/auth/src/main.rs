@@ -1,5 +1,4 @@
 #![feature(hash_drain_filter)]
-
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
@@ -85,7 +84,7 @@ async fn start_server(config: &AuthServerConfig) -> Result<()> {
 
     debug!("Loaded config {:?}", config);
     let (accounts, realms) = MySQLAccountService::new(pool.clone())
-        .try_join(MySQLRealmList::new(pool.clone(), Duration::from_secs(60)))
+        .try_join(MySQLRealmList::new(pool.clone(), Duration::from_secs(10)))
         .await
         .context("could not start the database services")?;
 

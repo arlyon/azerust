@@ -23,9 +23,11 @@ pub struct Account {
     pub id: AccountId,
     pub username: String,
     pub email: String,
+    pub ban_status: Option<BanStatus>,
+
     pub salt: Salt,
     pub verifier: Verifier,
-    pub ban_status: Option<BanStatus>,
+    pub session_key: Option<[u8; 40]>,
 
     pub joindate: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
@@ -67,12 +69,12 @@ impl ConnectToken {
 
     /// Get the random salt in use by this server.
     pub fn get_salt(&self) -> &Salt {
-        &self.server.get_salt()
+        self.server.get_salt()
     }
 
     /// Get the ephemeral public key for this server.
     pub fn get_b_pub(&self) -> &[u8; 32] {
-        &self.server.get_b_pub()
+        self.server.get_b_pub()
     }
 
     /// Get the security flags set for this login.

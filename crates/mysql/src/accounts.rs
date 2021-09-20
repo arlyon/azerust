@@ -28,7 +28,7 @@ impl MySQLAccountService {
 #[async_trait]
 impl AccountService for MySQLAccountService {
     async fn list_account(&self) -> Result<Vec<Account>, AccountFetchError> {
-        sqlx::query_as!(Account, r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online from account"#)
+        sqlx::query_as!(Account, r#"SELECT id as "id: _", username, session_key_auth as "session_key: _", salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online from account"#)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| AccountFetchError::IO(e.to_string()))
@@ -106,7 +106,7 @@ impl AccountService for MySQLAccountService {
     async fn get_account(&self, username: &str) -> Result<Account, AccountOpError> {
         sqlx::query_as!(
             Account,
-            r#"SELECT id as "id: _", username, salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE username = ?"#,
+            r#"SELECT id as "id: _", username, session_key_auth as "session_key: _",salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE username = ?"#,
             username
         )
         .fetch_one(&self.pool)
@@ -160,6 +160,7 @@ impl AccountService for MySQLAccountService {
             ban_status,
 
             // todo(arlyon): fill in
+            session_key: None,
             email: "".to_string(),
             online: 0,
             joindate: Utc::now(),

@@ -24,9 +24,11 @@ use tracing::debug;
 
 use crate::{conf::WorldServerConfig, opt::Opt, worldserver::WorldServer};
 
+mod client;
 mod conf;
 mod opt;
 mod protocol;
+mod world;
 mod worldserver;
 mod wow_bincode;
 
@@ -71,11 +73,11 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
         .await
         .context("could not start the database services")?;
 
-    let server = WorldServer {
+    let server = WorldServer::new(
         accounts,
         realms,
-        auth_server_address: config.auth_server_address.clone(),
-        realm_id: config.realm_id,
-    };
+        config.auth_server_address.clone(),
+        config.realm_id,
+    );
     server.start().await
 }

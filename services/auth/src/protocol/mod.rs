@@ -1,13 +1,14 @@
 use std::convert::TryFrom;
 
 use async_std::prelude::*;
+use azerust_protocol::auth::AuthCommand;
 use bincode::Options;
 use derive_more::Display;
 use num_enum::TryFromPrimitiveError;
 use thiserror::Error;
 use tracing::{instrument, trace};
 
-use self::packets::{AuthCommand, ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
+use self::packets::{ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
 use crate::wow_bincode::wow_bincode;
 
 pub mod packets;
@@ -67,12 +68,12 @@ pub enum MessageParseError {
     DecodeError(#[from] Box<bincode::ErrorKind>),
 }
 
-#[instrument(skip(packet))]
+#[instrument(skip(stream))]
 pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
-    packet: &mut R,
+    stream: &mut R,
 ) -> Result<Message, PacketHandleError> {
     let mut buffer = [0u8; 128];
-    packet.read(&mut buffer[..1]).await?;
+    stream.read(&mut buffer[..1]).await?;
 
     let command = AuthCommand::try_from(buffer[0])?;
     let command_len = match command {
@@ -80,16 +81,18 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
         AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
         AuthCommand::AuthReconnectChallenge => std::mem::size_of::<ConnectRequest>(),
         AuthCommand::AuthReconnectProof => std::mem::size_of::<ReconnectProof>(),
-        AuthCommand::RealmList => return Ok(Message::RealmList(Default::default())),
+        AuthCommand::RealmList => std::mem::size_of::<RealmListRequest>(),
         c => return Err(PacketHandleError::UnsupportedCommand(c)),
     };
 
-    let read_len = packet.read(&mut buffer[..command_len]).await?;
+    let buffer = &mut buffer[..command_len];
+    let read_len = stream.read(buffer).await?;
     trace!(
-        "read {:02X?} ({} bytes) for command {}",
+        "read {:02X?} ({} bytes) for command {:?} ({} bytes)",
         &buffer[..read_len],
         read_len,
-        command
+        command,
+        command_len
     );
 
     if read_len != command_len {
@@ -98,23 +101,19 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
 
     match command {
         AuthCommand::ConnectRequest => wow_bincode()
-            .deserialize(&buffer[..command_len])
-            .map(Message::ConnectRequest)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        AuthCommand::AuthLogonProof => wow_bincode()
-            .deserialize(&buffer[..command_len])
-            .map(Message::ConnectProof)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+            .deserialize(buffer)
+            .map(Message::ConnectRequest),
+        AuthCommand::AuthLogonProof => wow_bincode().deserialize(buffer).map(Message::ConnectProof),
         AuthCommand::AuthReconnectChallenge => wow_bincode()
-            .deserialize(&buffer[..command_len])
-            .map(Message::ReconnectRequest)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
+            .deserialize(buffer)
+            .map(Message::ReconnectRequest),
         AuthCommand::AuthReconnectProof => wow_bincode()
-            .deserialize(&buffer[..command_len])
-            .map(Message::ReconnectProof)
-            .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e))),
-        _ => Err(PacketHandleError::UnsupportedCommand(command)),
+            .deserialize(buffer)
+            .map(Message::ReconnectProof),
+        AuthCommand::RealmList => wow_bincode().deserialize(buffer).map(Message::RealmList),
+        _ => return Err(PacketHandleError::UnsupportedCommand(command)),
     }
+    .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e)))
 }
 
 #[derive(Error, Debug)]
@@ -128,7 +127,7 @@ pub enum PacketHandleError {
     #[error("error while reading packet: {0}")]
     IoRead(#[from] async_std::io::Error),
 
-    #[error("command is not currently supported: {0}")]
+    #[error("command is not currently supported: {0:?}")]
     UnsupportedCommand(AuthCommand),
 
     #[error("command is invalid: {0}")]
