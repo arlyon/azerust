@@ -1,7 +1,7 @@
 {
   "db": "MySQL",
-  "067221deb069157e8b4bc7e65ebc308634fe1457f27b4a67d7345836e912df14": {
-    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE username = ?",
+  "195af0dd90260b99218978c6f75ffb3d9c38f7d9a444999d86c5013500947c9b": {
+    "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\",salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE username = ?",
     "describe": {
       "columns": [
         {
@@ -30,6 +30,18 @@
         },
         {
           "ordinal": 2,
+          "name": "session_key: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 40
+          }
+        },
+        {
+          "ordinal": 3,
           "name": "salt: _",
           "type_info": {
             "type": "String",
@@ -41,7 +53,7 @@
           }
         },
         {
-          "ordinal": 3,
+          "ordinal": 4,
           "name": "verifier: _",
           "type_info": {
             "type": "String",
@@ -53,7 +65,7 @@
           }
         },
         {
-          "ordinal": 4,
+          "ordinal": 5,
           "name": "email",
           "type_info": {
             "type": "VarString",
@@ -65,7 +77,7 @@
           }
         },
         {
-          "ordinal": 5,
+          "ordinal": 6,
           "name": "joindate",
           "type_info": {
             "type": "Timestamp",
@@ -77,7 +89,7 @@
           }
         },
         {
-          "ordinal": 6,
+          "ordinal": 7,
           "name": "last_login",
           "type_info": {
             "type": "Timestamp",
@@ -89,7 +101,7 @@
           }
         },
         {
-          "ordinal": 7,
+          "ordinal": 8,
           "name": "ban_status: _",
           "type_info": {
             "type": "Null",
@@ -101,7 +113,7 @@
           }
         },
         {
-          "ordinal": 8,
+          "ordinal": 9,
           "name": "online",
           "type_info": {
             "type": "Tiny",
@@ -119,6 +131,7 @@
       "nullable": [
         false,
         false,
+        true,
         false,
         false,
         false,
@@ -129,8 +142,8 @@
       ]
     }
   },
-  "0ed0c655f2aaa7cf2b516eeb3ed9e583e1089b60dea8971bd48dcd71ec6dda16": {
-    "query": "SELECT id as \"id: _\", username, salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online from account",
+  "1cce816196f0aaa829aa95399cb668e8c6285319e19c95ba4a7e9c95a423b14b": {
+    "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\", salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online from account",
     "describe": {
       "columns": [
         {
@@ -159,6 +172,18 @@
         },
         {
           "ordinal": 2,
+          "name": "session_key: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 40
+          }
+        },
+        {
+          "ordinal": 3,
           "name": "salt: _",
           "type_info": {
             "type": "String",
@@ -170,7 +195,7 @@
           }
         },
         {
-          "ordinal": 3,
+          "ordinal": 4,
           "name": "verifier: _",
           "type_info": {
             "type": "String",
@@ -182,7 +207,7 @@
           }
         },
         {
-          "ordinal": 4,
+          "ordinal": 5,
           "name": "email",
           "type_info": {
             "type": "VarString",
@@ -194,7 +219,7 @@
           }
         },
         {
-          "ordinal": 5,
+          "ordinal": 6,
           "name": "joindate",
           "type_info": {
             "type": "Timestamp",
@@ -206,7 +231,7 @@
           }
         },
         {
-          "ordinal": 6,
+          "ordinal": 7,
           "name": "last_login",
           "type_info": {
             "type": "Timestamp",
@@ -218,7 +243,7 @@
           }
         },
         {
-          "ordinal": 7,
+          "ordinal": 8,
           "name": "ban_status: _",
           "type_info": {
             "type": "Null",
@@ -230,7 +255,7 @@
           }
         },
         {
-          "ordinal": 8,
+          "ordinal": 9,
           "name": "online",
           "type_info": {
             "type": "Tiny",
@@ -248,6 +273,7 @@
       "nullable": [
         false,
         false,
+        true,
         false,
         false,
         false,
@@ -431,6 +457,16 @@
         false,
         false
       ]
+    }
+  },
+  "7d596a80fe1d1014a5ce5a0463ccd2b1990f5b8aff6e9e853dc1a0911f9849d7": {
+    "query": "insert into realmlist(id, flag) values(?, ?) on duplicate key update flag = values(`flag`)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 2
+      },
+      "nullable": []
     }
   },
   "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
