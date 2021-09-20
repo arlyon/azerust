@@ -1,9 +1,8 @@
 on:
   push:
-    branches: ['master']
+    branches: ["master"]
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_AUTH: ${{ github.repository }}-auth
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
@@ -23,16 +22,31 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
-        id: meta
+        id: auth_meta
         uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_AUTH }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-auth
 
-      - name: Build and push Docker image
+      - name: Build and push auth server
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.auth_meta.outputs.tags }}
+          labels: ${{ steps.auth_meta.outputs.labels }}
           target: auth
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: world_meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-world
+
+      - name: Build and push world server
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.world_meta.outputs.tags }}
+          labels: ${{ steps.world_meta.outputs.labels }}
+          target: world
