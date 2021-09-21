@@ -24,7 +24,7 @@ RUN cargo build --bin azerust-world --release
 
 FROM scratch as auth
 COPY --from=auth-builder /app/target/x86_64-unknown-linux-musl/release/azerust-auth /auth
-CMD ["/auth", "run"]
+CMD ["/auth"]
 
 FROM scratch as world
 COPY --from=world-builder /app/target/x86_64-unknown-linux-musl/release/azerust-world /world

@@ -13,7 +13,8 @@ pub struct AuthServerConfig {
 
 impl AuthServerConfig {
     pub async fn read(path: &PathBuf) -> Result<Self> {
-        let file = std::fs::File::open(path)?;
+        let file = std::fs::File::open(path)
+            .with_context(|| format!("could not open config at {:?}", path.as_os_str()))?;
         serde_yaml::from_reader(file).context("could not read yaml file")
     }
 

@@ -3,7 +3,7 @@
 Azerust is an experimental WoW server emulator for patch 3.3.5
 written in Rust. Currently, it only implements the auth server.
 It is currently being built to be compatible (read: piggy back
-on top of) the TrinityCore database. Note, however, that we use 
+on top of) the TrinityCore database. Note, however, that we use
 mariadb in the docker-compose file. Our goals are:
 
 - fast
@@ -17,10 +17,13 @@ mariadb in the docker-compose file. Our goals are:
 
 ## Getting Started
 
+This project uses [`cargo-make`](https://github.com/sagiegurari/cargo-make)
+for scripting / tasks.
+
 ### Configuration
 
-You will need to provide some configs. Run `azerust init` to
-generate a default file.
+You will need to provide some configs. Run the `init` command on
+the world and auth server to generate configs for them.
 
 ### Docker
 
@@ -30,16 +33,13 @@ available. We need to populate a schema, for which we piggy back
 off the incredible Trinitycore project.
 
 ```bash
-> cd scripts
-> ./setup.sh
-> cd -
+> cargo make fetch-db
 > docker compose up
 ```
 
-You will also need to create a `config-compose.yml` which is used
-by the image to  
-
 The downloaded SQL scripts will be used to set up the databases.
+You will also need to create a `config-auth-compose.yml` and a
+`confit-world-compose.yml` file which are used by docker-compose.
 
 ### Building
 
@@ -49,8 +49,10 @@ certain information from our database. Obviously spinning up a
 db every time you build is cumbersome, so there are two options:
 
 `.env`
+
 ```bash
 DATABASE_URL=mysql://localhost/auth
+# or
 SQLX_OFFLINE=true
 ```
 
@@ -58,18 +60,19 @@ Setting `DATABASE_URL` dynamically updates queries as we go, while
 the `SQLX_OFFLINE` option uses the data in `sqlx-data.json`. This
 should always be up to date. If the queries change at any time, we
 will need to regenerate this file from the live database. To do
-this, use the sqlx cli.
+this, use the make command:
 
 ```bash
-cargo install sqlx-cli
-cargo sqlx prepare --merged
+cargo make prepare
 ```
 
 The next part is easy. Provide the `--release` flag if you want to
 make it go fast.
 
-```
-cargo run --bin auth --release -- log
+```bash
+cargo make auth
+# or
+cargo run --bin azerust-auth --release
 ```
 
 ### Logging
@@ -77,15 +80,15 @@ cargo run --bin auth --release -- log
 You can use the [RUST_LOG env var](https://rust-lang-nursery.github.io/rust-cookbook/development_tools/debugging/config_log.html) to configure log levels.
 For example, we can enable debug mode for the azerust packages:
 
-```
-RUST_LOG=auth=debug,mysql=debug,game=debug azerust log
+```bash
+RUST_LOG=azerust_auth,azerust_world=debug
 ```
 
 ## Account Creation
 
-To create a command, you can use the `exec` command to run commands 
+To create a command, you can use the `exec` command to run commands
 against the database.
 
-```
-azerust exec account create <username> <password> <email>
+```bash
+cargo make auth exec account create <username> <password> <email>
 ```

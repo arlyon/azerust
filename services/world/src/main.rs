@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let config = WorldServerConfig::read(&opts.config).await;
 
     match opts.command {
-        opt::OptCommand::Init => {
+        Some(opt::OptCommand::Init) => {
             let auth = WorldServerConfig {
                 bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
             };
             auth.write(&opts.config).await?;
         }
-        opt::OptCommand::Run => start_server(&config?).await?,
+        None => start_server(&config?).await?,
     };
 
     Ok(())

@@ -1,15 +1,25 @@
 version: "3.9"
+x-log-level: &log-level
+  RUST_LOG: "azerust_world,azerust_auth"
 services:
+  world:
+    image: ghcr.io/arlyon/azerust-world:master
+    build:
+      context: .
+    depends_on: [database]
+    environment: *log-level
+    volumes:
+      - ./config-world-compose.yaml:/config.yaml:Z
+    ports:
+      - "8085:8085"
   auth:
     image: ghcr.io/arlyon/azerust-auth:master
     build:
       context: .
     depends_on: [database]
-    environment:
-      AZERUST_LOGIN_DATABASE: mysql://root:azerust@database/auth
-      RUST_LOG: mysql=DEBUG,auth=DEBUG,game=DEBUG
+    environment: *log-level
     volumes:
-      - ./config-compose.yaml:/config.yaml:Z
+      - ./config-auth-compose.yaml:/config.yaml:Z
     ports:
       - "3724:3724"
       - "8000:8000"

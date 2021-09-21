@@ -42,11 +42,11 @@ async fn main() -> Result<()> {
     setup_panic!();
     tracing_subscriber::fmt::init();
 
-    let opts: Opt = Opt::from_args();
+    let opts = Opt::from_args();
     let config = AuthServerConfig::read(&opts.config).await;
 
     match opts.command {
-        opt::OptCommand::Exec(c) => match c {
+        Some(opt::OptCommand::Exec(c)) => match c {
             opt::Command::Account {
                 command:
                     AccountCommand::Create {
@@ -62,9 +62,8 @@ async fn main() -> Result<()> {
                     Err(e) => eprintln!("failed to create account: {}", e),
                 };
             }
-            opt::Command::Shutdown => {}
         },
-        opt::OptCommand::Init => {
+        Some(opt::OptCommand::Init) => {
             let auth = AuthServerConfig {
                 bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
@@ -73,7 +72,7 @@ async fn main() -> Result<()> {
             };
             auth.write(&opts.config).await?;
         }
-        opt::OptCommand::Run => start_server(&config?).await?,
+        None => start_server(&config?).await?,
     };
 
     Ok(())
