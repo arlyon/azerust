@@ -1,0 +1,34 @@
+[tasks.prepare]
+script = '''
+#!/usr/bin/env bash
+SQLX_OFFLINE=false cargo check --workspace
+jq -s '{"db": "MySQL"} + INDEX(.hash)' target/sqlx/query-*.json > sqlx-data.json
+'''
+
+[tasks.fetch-db]
+script = '''
+#!/usr/bin/env bash
+AUTH=auth
+CHARACTERS=characters
+
+mkdir -p schema
+printf "use $AUTH;\n" > schema/01_$AUTH.sql
+printf "use $CHARACTERS;\n" > schema/02_$CHARACTERS.sql
+curl https://raw.githubusercontent.com/TrinityCore/TrinityCore/3.3.5/sql/create/create_mysql.sql > schema/00_databases.sql
+curl https://raw.githubusercontent.com/TrinityCore/TrinityCore/3.3.5/sql/base/${AUTH}_database.sql >> schema/01_$AUTH.sql
+curl https://raw.githubusercontent.com/TrinityCore/TrinityCore/3.3.5/sql/base/${CHARACTERS}_database.sql >> schema/02_$CHARACTERS.sql
+'''
+
+[tasks.world]
+command = "cargo"
+args = ["run", "--bin", "azerust-world", "config-world.yaml", "run"]
+
+[tasks.auth]
+command = "cargo"
+args = ["run", "--bin", "azerust-auth", "config-auth.yaml", "run"]
+
+[env]
+RUST_LOG = "azerust_world=trace,azerust_auth=trace,azerust_game=trace"
+
+[config]
+default_to_workspace = false

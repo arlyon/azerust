@@ -14,11 +14,11 @@ services:
       - "3724:3724"
       - "8000:8000"
   database:
-    image: "mysql:5.7"
+    image: "mariadb:10"
     environment:
       MYSQL_ROOT_PASSWORD: azerust
     ports:
       - "3306:3306"
     volumes:
-      - ./scripts/db:/docker-entrypoint-initdb.d:Z
+      - ./schema:/docker-entrypoint-initdb.d:Z
       - ./data:/var/lib/mysql:Z
