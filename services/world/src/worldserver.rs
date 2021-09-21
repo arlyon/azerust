@@ -15,7 +15,7 @@ use async_std::{
     stream,
     sync::RwLock,
 };
-use azerust_game::{accounts::AccountService, realms::RealmList};
+use azerust_game::{accounts::AccountService, characters::CharacterService, realms::RealmList};
 use azerust_protocol::world::{OpCode, ResponseCode};
 use bincode::Options;
 use rand::Rng;
@@ -29,14 +29,14 @@ use crate::{
     wow_bincode::wow_bincode,
 };
 
-pub struct WorldServer<A: AccountService, R: RealmList> {
+pub struct WorldServer<A: AccountService, R: RealmList, C: CharacterService> {
     accounts: A,
     realms: R,
     auth_server_address: String,
     realm_id: u8,
     realm_seed: [u8; 4],
     clients: RwLock<HashMap<ClientId, Arc<RwLock<Client>>>>,
-    world: World<A>,
+    world: World<A, C>,
 
     /// target number of milliseconds between world updates
     update_interval: u16,
@@ -45,10 +45,16 @@ pub struct WorldServer<A: AccountService, R: RealmList> {
     running: bool,
 }
 
-impl<A: AccountService + Clone, R: RealmList> WorldServer<A, R> {
-    pub fn new(accounts: A, realms: R, auth_server_address: String, realm_id: u8) -> Self {
+impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A, R, C> {
+    pub fn new(
+        accounts: A,
+        realms: R,
+        characters: C,
+        auth_server_address: String,
+        realm_id: u8,
+    ) -> Self {
         Self {
-            world: World::new(accounts.clone()),
+            world: World::new(accounts.clone(), characters),
             accounts,
             realms,
             auth_server_address,
@@ -199,9 +205,9 @@ impl<A: AccountService + Clone, R: RealmList> WorldServer<A, R> {
     }
 }
 
-async fn handle_auth_session<A: AccountService>(
+async fn handle_auth_session<A: AccountService, C: CharacterService>(
     stream: TcpStream,
-    world: &World<A>,
+    world: &World<A, C>,
     client: Arc<RwLock<Client>>,
     auth_session: AuthSession,
     realm_id: u32,

@@ -15,8 +15,8 @@
 use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::{Context, Result};
-use async_std::prelude::*;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
+use azerust_mysql_characters::MySQLCharacterService;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
@@ -68,14 +68,15 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
         .context("could not start the database pool")?;
 
     debug!("Loaded config {:?}", config);
-    let (accounts, realms) = MySQLAccountService::new(pool.clone())
-        .try_join(MySQLRealmList::new(pool.clone(), Duration::from_secs(60)))
-        .await
-        .context("could not start the database services")?;
+
+    let accounts = MySQLAccountService::new(pool.clone());
+    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(60));
+    let characters = MySQLCharacterService::new(pool.clone());
 
     let server = WorldServer::new(
         accounts,
         realms,
+        characters,
         config.auth_server_address.clone(),
         config.realm_id,
     );

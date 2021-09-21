@@ -19,9 +19,9 @@ pub struct MySQLAccountService {
 }
 
 impl MySQLAccountService {
-    pub async fn new(pool: MySqlPool) -> Result<Self, sqlx::Error> {
+    pub fn new(pool: MySqlPool) -> Self {
         debug!("Starting accounts service");
-        Ok(Self { pool })
+        Self { pool }
     }
 }
 

@@ -7,7 +7,7 @@ use async_std::{
     stream::{interval, Interval},
     sync::RwLock,
 };
-use azerust_game::accounts::AccountService;
+use azerust_game::{accounts::AccountService, characters::CharacterService};
 
 use super::Session;
 use crate::{
@@ -15,18 +15,20 @@ use crate::{
     protocol::{Addon, ClientPacket, ServerPacket},
 };
 
-pub struct World<A: AccountService> {
+pub struct World<A: AccountService, C: CharacterService> {
     accounts: A,
+    characters: C,
     receiver: Receiver<(ClientId, ClientPacket)>,
     sender: Sender<(ClientId, ClientPacket)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
 }
 
-impl<A: AccountService> World<A> {
-    pub fn new(accounts: A) -> Self {
+impl<A: AccountService, C: CharacterService> World<A, C> {
+    pub fn new(accounts: A, characters: C) -> Self {
         let (sender, receiver) = unbounded();
         Self {
             accounts,
+            characters,
             sender,
             receiver,
             sessions: Default::default(),
@@ -67,7 +69,7 @@ impl<A: AccountService> World<A> {
                 }
                 ClientPacket::CharEnum => {
                     let id = session.client.read().await.account.unwrap();
-                    let account = self.accounts.get(id).await.unwrap();
+                    let chars = self.characters.get_by_account(id).await.unwrap();
                     // get account
 
                     // get characters

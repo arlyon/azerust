@@ -1,5 +1,31 @@
 {
   "db": "MySQL",
+  "6a352ee61ee8a7f219aff793590fd007116f50894e63db334f18113e91f124b3": {
+    "query": "SELECT count(*) as c FROM characters where name = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "c",
+          "type_info": {
+            "type": "LongLong",
+            "flags": {
+              "bits": 129
+            },
+            "char_set": 63,
+            "max_size": 21
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    },
+    "hash": "6a352ee61ee8a7f219aff793590fd007116f50894e63db334f18113e91f124b3"
+  },
   "f582e1d6c42043942af9191c90642a78ec62c6f81d294169014268cd4311717f": {
     "query": "INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL",
     "describe": {
@@ -21,6 +47,277 @@
       "nullable": []
     },
     "hash": "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf"
+  },
+  "d81d6f29ae8f615c15b51b101e7115b30246edc35927d8eedd3ddde50d9b7803": {
+    "query": "SELECT guid as 'id: _', account as 'account: _', name, level, race, class, gender, skin as skin_color, face, hairStyle as hair_style, hairColor as hair_color, facialStyle as facial_style, zone, map, position_x, position_y, position_z FROM characters where account = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 35
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "account: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 41
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "name",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4233
+            },
+            "char_set": 224,
+            "max_size": 48
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "level",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "race",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "class",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "gender",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "skin_color",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "face",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "hair_style",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 10,
+          "name": "hair_color",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 11,
+          "name": "facial_style",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 12,
+          "name": "zone",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 13,
+          "name": "map",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 14,
+          "name": "position_x",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        },
+        {
+          "ordinal": 15,
+          "name": "position_y",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        },
+        {
+          "ordinal": 16,
+          "name": "position_z",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "hash": "d81d6f29ae8f615c15b51b101e7115b30246edc35927d8eedd3ddde50d9b7803"
+  },
+  "6d6584fb123d58c2181ee98f272184fdb461da450c29986c45dc16f8be73a3c0": {
+    "query": "SELECT count(*) as count FROM characters where account = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "count",
+          "type_info": {
+            "type": "LongLong",
+            "flags": {
+              "bits": 129
+            },
+            "char_set": 63,
+            "max_size": 21
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    },
+    "hash": "6d6584fb123d58c2181ee98f272184fdb461da450c29986c45dc16f8be73a3c0"
+  },
+  "26c5993bae0e6ea917e5ff1f3165558c34945b2e769f67710162f336e215750e": {
+    "query": "DELETE FROM characters where guid = ?",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": []
+    },
+    "hash": "26c5993bae0e6ea917e5ff1f3165558c34945b2e769f67710162f336e215750e"
   },
   "7d596a80fe1d1014a5ce5a0463ccd2b1990f5b8aff6e9e853dc1a0911f9849d7": {
     "query": "insert into realmlist(id, flag) values(?, ?) on duplicate key update flag = values(`flag`)",
@@ -176,20 +473,20 @@
     },
     "hash": "ec6577168c8d18ba07075b6bc370728c4868186413b69da6ff9a6bcbcf089876"
   },
-  "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
-    "query": "SELECT id FROM account WHERE id = ?",
+  "c1f81d45e18ff045322633419784a8eeebe022bf296a7774b820b1679c85c404": {
+    "query": "SELECT count(*) as c FROM characters where account = ?",
     "describe": {
       "columns": [
         {
           "ordinal": 0,
-          "name": "id",
+          "name": "c",
           "type_info": {
-            "type": "Long",
+            "type": "LongLong",
             "flags": {
-              "bits": 547
+              "bits": 129
             },
             "char_set": 63,
-            "max_size": 10
+            "max_size": 21
           }
         }
       ],
@@ -200,7 +497,7 @@
         false
       ]
     },
-    "hash": "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f"
+    "hash": "c1f81d45e18ff045322633419784a8eeebe022bf296a7774b820b1679c85c404"
   },
   "0d689f692367f4c7b096ef47376063af780de4fd145a2d5aefa4b8ec6745b548": {
     "query": "SELECT guid as 'id: _', account as 'account: _', name, level, race, class, gender, skin as skin_color, face, hairStyle as hair_style, hairColor as hair_color, facialStyle as facial_style, zone, map, position_x, position_y, position_z FROM characters where guid = ?",
@@ -435,6 +732,32 @@
       ]
     },
     "hash": "0d689f692367f4c7b096ef47376063af780de4fd145a2d5aefa4b8ec6745b548"
+  },
+  "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
+    "query": "SELECT id FROM account WHERE id = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    },
+    "hash": "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f"
   },
   "195af0dd90260b99218978c6f75ffb3d9c38f7d9a444999d86c5013500947c9b": {
     "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\",salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE username = ?",
@@ -1031,5 +1354,31 @@
       ]
     },
     "hash": "346dff44330e9b83ef3710c5ed8140137870e916b12a58a1fa7fea170000afd8"
+  },
+  "239eaf13aa62ab80135ab5600b4eb6a61ef1bd04b2894a6e339b9f15e7eef237": {
+    "query": "SELECT count(*) as id FROM characters where account = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "LongLong",
+            "flags": {
+              "bits": 129
+            },
+            "char_set": 63,
+            "max_size": 21
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    },
+    "hash": "239eaf13aa62ab80135ab5600b4eb6a61ef1bd04b2894a6e339b9f15e7eef237"
   }
 }

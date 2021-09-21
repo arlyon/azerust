@@ -15,7 +15,7 @@
 
 use std::{net::Ipv4Addr, time::Duration};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use async_std::prelude::*;
 use azerust_game::accounts::AccountService;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
                     },
             } => {
                 let pool = MySqlPool::connect(&config?.login_database).await?;
-                let accounts = MySQLAccountService::new(pool).await?;
+                let accounts = MySQLAccountService::new(pool);
                 match accounts.create_account(&username, &password, &email).await {
                     Ok(id) => println!("created account {}", id),
                     Err(e) => eprintln!("failed to create account: {}", e),
@@ -82,10 +82,8 @@ async fn start_server(config: &AuthServerConfig) -> Result<()> {
     let pool = MySqlPool::connect(&config.login_database).await?;
 
     debug!("Loaded config {:?}", config);
-    let (accounts, realms) = MySQLAccountService::new(pool.clone())
-        .try_join(MySQLRealmList::new(pool.clone(), Duration::from_secs(10)))
-        .await
-        .context("could not start the database services")?;
+    let accounts = MySQLAccountService::new(pool.clone());
+    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(10));
 
     let server = AuthServer::new(accounts.clone(), realms.clone());
     let run = server.start(config.bind_address, config.port);

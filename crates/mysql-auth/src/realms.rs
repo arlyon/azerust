@@ -18,14 +18,14 @@ pub struct MySQLRealmList {
 }
 
 impl MySQLRealmList {
-    pub async fn new(pool: MySqlPool, update_interval: Duration) -> Result<Self, sqlx::Error> {
+    pub fn new(pool: MySqlPool, update_interval: Duration) -> Self {
         debug!("Starting realmlist service");
-        Ok(Self {
+        Self {
             pool,
             update_interval,
             next_update: Arc::new(RwLock::new(SystemTime::now())),
             realms: Arc::new(RwLock::new(vec![])),
-        })
+        }
     }
 }
 

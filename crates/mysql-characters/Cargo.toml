@@ -11,3 +11,4 @@ license = "MIT OR Apache-2.0"
 async-trait = "0.1.51"
 azerust-game = { path = "../game" }
 sqlx = { version = "0.5.7" }
+tracing = "0.1.28"
