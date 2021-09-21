@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc,
     },
-    time::Instant,
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
@@ -14,18 +14,22 @@ use async_std::{
     net::TcpStream,
     sync::{Mutex, RwLock},
 };
+use azerust_game::characters::{AccountData, Character};
 use azerust_protocol::{
+    header_crypto::HeaderCrypto,
     world::{OpCode, ResponseCode},
-    ClientVersion,
+    Addon, ClientPacket, ClientVersion, ServerPacket,
 };
 use bincode::Options;
-use tracing::trace;
+use tracing::{instrument, trace};
 
 use crate::{
     client::{Client, ClientId},
-    protocol::{Addon, ClientPacket, HeaderCrypto, ServerPacket},
+    world::world::GLOBAL_CACHE_MASK,
     wow_bincode::wow_bincode,
 };
+
+const NUM_ACCOUNT_DATA_TYPES: usize = 8;
 
 /// An active session in the world.
 pub struct Session {
@@ -38,6 +42,8 @@ pub struct Session {
     latency: AtomicU32,
     timeout: Mutex<Instant>,
     addons: Vec<Addon>,
+
+    character: Arc<RwLock<Option<Character>>>,
 }
 
 impl Session {
@@ -58,9 +64,20 @@ impl Session {
             addons,
             latency: AtomicU32::new(0),
             timeout: Mutex::new(Instant::now()),
+            character: Arc::new(RwLock::new(None)),
         };
         x.finalize().await?;
         Ok(x)
+    }
+
+    pub async fn login(&self, character: Character) -> Result<()> {
+        {
+            self.character.write().await.replace(character);
+        }
+
+        // todo(arlyon)
+
+        Ok(())
     }
 
     pub async fn reset_timeout(&self) -> Result<()> {
@@ -79,7 +96,8 @@ impl Session {
     }
 
     /// send a packet to the client
-    pub async fn send_packet(&self, p: &ServerPacket) -> Result<()> {
+    pub async fn send_packet(&self, p: ServerPacket) -> Result<()> {
+        trace!("sending packet to client {:?}: {:?}", self.client_id, p);
         match p {
             ServerPacket::AuthResponse => {
                 self.write_packet(
@@ -108,7 +126,7 @@ impl Session {
             ServerPacket::ClientCacheVersion(version) => {
                 self.write_packet(
                     OpCode::SmsgClientcacheVersion,
-                    &wow_bincode().serialize(version)?,
+                    &wow_bincode().serialize(&version)?,
                 )
                 .await?;
             }
@@ -120,12 +138,94 @@ impl Session {
                 .await?;
             }
             ServerPacket::Pong(ping) => {
-                self.write_packet(OpCode::SmsgPong, &wow_bincode().serialize(ping)?)
+                self.write_packet(OpCode::SmsgPong, &wow_bincode().serialize(&ping)?)
+                    .await?;
+            }
+            ServerPacket::CharEnum(characters) => {
+                let length = iter::once(characters.len() as u8);
+                trace!(
+                    "sending characters {:?}",
+                    characters.iter().map(|(c, _)| &c.name).collect::<Vec<_>>()
+                );
+                let char_data = characters.into_iter().flat_map(|(c, items)| {
+                    wow_bincode()
+                        .serialize(&(
+                            c.id,
+                            c.name,
+                            c.race,
+                            c.class,
+                            [
+                                c.gender,
+                                c.skin_color,
+                                c.face,
+                                c.hair_style,
+                                c.hair_color,
+                                c.facial_style,
+                            ],
+                            c.level,
+                            [
+                                c.zone as u32,
+                                c.map as u32,
+                                c.position_x as u32,
+                                c.position_y as u32,
+                                c.position_z as u32,
+                            ],
+                            0u32, // guild
+                            0u32, // flags
+                            0u32,
+                            0u8,  // todo(arlyon): first login
+                            0u32, //
+                            0u32, // pet data
+                            0u32, //
+                            items,
+                        ))
+                        .unwrap()
+                });
+
+                self.write_packet(
+                    OpCode::SmsgCharEnum,
+                    &length.chain(char_data).collect::<Vec<_>>(),
+                )
+                .await?;
+            }
+            ServerPacket::AccountDataTimes(account_data) => {
+                let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
+
+                let mut buffer = [0u8; 4 + 1 + 4 + 4 * 3];
+                wow_bincode().serialize_into(
+                    &mut buffer[..],
+                    &(
+                        now,
+                        0u8,
+                        GLOBAL_CACHE_MASK,
+                        account_data.config.global.map(|c| c.time).unwrap_or(0),
+                        account_data.bindings.global.map(|c| c.time).unwrap_or(0),
+                        account_data.macros.global.map(|c| c.time).unwrap_or(0),
+                    ),
+                )?;
+
+                self.write_packet(OpCode::SmsgAccountDataTimes, &buffer)
+                    .await?;
+            }
+            ServerPacket::RealmSplit { realm } => {
+                self.write_packet(
+                    OpCode::SmsgRealmSplit,
+                    &wow_bincode().serialize(&(
+                        realm, 0u32, // split state normal
+                        "01/01/01",
+                    ))?,
+                )
+                .await?;
+            }
+            ServerPacket::CharacterCreate(code) => {
+                self.write_packet(OpCode::SmsgCharCreate, &[code as u8])
+                    .await?;
+            }
+            ServerPacket::CharacterDelete(code) => {
+                self.write_packet(OpCode::SmsgCharDelete, &[code as u8])
                     .await?;
             }
         };
-
-        trace!("send {:?}", p);
 
         Ok(())
     }
@@ -135,12 +235,12 @@ impl Session {
     }
 
     pub async fn finalize(&self) -> Result<()> {
-        self.send_packet(&ServerPacket::AuthResponse).await?;
-        self.send_packet(&ServerPacket::AddonInfo(self.addons.clone()))
+        self.send_packet(ServerPacket::AuthResponse).await?;
+        self.send_packet(ServerPacket::AddonInfo(self.addons.clone()))
             .await?;
-        self.send_packet(&ServerPacket::ClientCacheVersion(0))
+        self.send_packet(ServerPacket::ClientCacheVersion(0))
             .await?;
-        self.send_packet(&ServerPacket::TutorialData).await
+        self.send_packet(ServerPacket::TutorialData).await
     }
 
     async fn write_packet(&self, opcode: OpCode, bytes: &[u8]) -> Result<usize> {

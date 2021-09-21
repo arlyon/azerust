@@ -16,7 +16,10 @@ use async_std::{
     sync::RwLock,
 };
 use azerust_game::{accounts::AccountService, characters::CharacterService, realms::RealmList};
-use azerust_protocol::world::{OpCode, ResponseCode};
+use azerust_protocol::{
+    world::{OpCode, ResponseCode},
+    AuthSession, ClientPacket,
+};
 use bincode::Options;
 use rand::Rng;
 use sha1::Digest;
@@ -24,7 +27,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     client::{Client, ClientId},
-    protocol::{read_packets, AuthSession, ClientPacket},
+    protocol::read_packets,
     world::{Session, World},
     wow_bincode::wow_bincode,
 };
@@ -122,7 +125,6 @@ impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A
                 self.realm_seed,
                 challenge,
             );
-            debug!("sending packet {:02X?}", wow_bincode().serialize(&packet));
             stream.write(&wow_bincode().serialize(&packet)?).await?;
 
             if let Err(e) = self.connect_loop(&mut stream, id).await {
@@ -161,12 +163,13 @@ impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A
     #[instrument(skip(self, stream))]
     async fn connect_loop(&self, stream: &mut TcpStream, client_id: ClientId) -> Result<()> {
         let mut session = None;
+        debug!("accepting packets from {:?}", client_id);
 
         loop {
-            let messages = read_packets(stream, &session).await?;
-            for message in messages {
-                debug!("received message {:?}", message);
-                match (&session, message) {
+            let packets = read_packets(stream, &session).await?;
+            for packet in packets {
+                trace!("received message {:?}", packet);
+                match (&session, packet) {
                     (_, ClientPacket::AuthSession(auth_session)) => {
                         let client = self.clients.read().await.get(&client_id).cloned();
                         match handle_auth_session(

@@ -2,7 +2,7 @@
 name = "azerust-mysql-characters"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,5 +10,6 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 async-trait = "0.1.51"
 azerust-game = { path = "../game" }
+rand = "0.8.4"
 sqlx = { version = "0.5.7" }
 tracing = "0.1.28"

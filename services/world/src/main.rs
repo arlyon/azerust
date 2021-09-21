@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
                 data_dir: 0,
 
                 character_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
-                login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
+                auth_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
                 world_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
             auth.write(&opts.config).await?;
@@ -63,15 +63,19 @@ async fn main() -> Result<()> {
 }
 
 async fn start_server(config: &WorldServerConfig) -> Result<()> {
-    let pool = MySqlPool::connect(&config.login_database)
+    let auth_pool = MySqlPool::connect(&config.auth_database)
+        .await
+        .context("could not start the database pool")?;
+
+    let character_pool = MySqlPool::connect(&config.character_database)
         .await
         .context("could not start the database pool")?;
 
     debug!("Loaded config {:?}", config);
 
-    let accounts = MySQLAccountService::new(pool.clone());
-    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(60));
-    let characters = MySQLCharacterService::new(pool.clone());
+    let accounts = MySQLAccountService::new(auth_pool.clone());
+    let realms = MySQLRealmList::new(auth_pool.clone(), Duration::from_secs(60));
+    let characters = MySQLCharacterService::new(character_pool.clone());
 
     let server = WorldServer::new(
         accounts,

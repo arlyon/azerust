@@ -569,6 +569,7 @@ dependencies = [
  "enumflags2",
  "num_enum",
  "rand 0.8.4",
+ "serde",
  "sha-1 0.9.8",
  "sqlx",
  "strum",
@@ -609,6 +610,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "azerust-game",
+ "rand 0.8.4",
  "sqlx",
  "tracing",
 ]
@@ -624,6 +626,7 @@ dependencies = [
  "azerust-game",
  "derive_more",
  "num_enum",
+ "rust-crypto",
  "serde",
 ]
 

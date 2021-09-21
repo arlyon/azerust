@@ -10,7 +10,7 @@ pub struct WorldServerConfig {
     pub auth_server_address: String,
 
     pub character_database: String,
-    pub login_database: String,
+    pub auth_database: String,
     pub world_database: String,
 
     pub realm_id: u8,

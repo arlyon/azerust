@@ -8,7 +8,7 @@ pub struct AuthServerConfig {
     pub port: u16,
     pub api_port: Option<u16>,
 
-    pub login_database: String,
+    pub auth_database: String,
 }
 
 impl AuthServerConfig {

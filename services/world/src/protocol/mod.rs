@@ -5,20 +5,13 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use async_std::prelude::*;
-use azerust_protocol::world::OpCode;
+use azerust_game::characters::Character;
+use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
 use tracing::trace;
 
 use crate::{world::Session, wow_bincode::wow_bincode};
-
-mod client;
-mod header_crypto;
-mod server;
-
-pub use client::{Addon, AuthSession, ClientPacket};
-pub use header_crypto::HeaderCrypto;
-pub use server::ServerPacket;
 
 /// Reads one or more packets from a frame in the stream
 pub async fn read_packets<R: async_std::io::Read + std::fmt::Debug + Unpin>(
@@ -67,10 +60,10 @@ pub async fn read_packets<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     Ok(packets)
 }
 
-fn read_packet(code: OpCode, buffer: &[u8]) -> Result<ClientPacket> {
+fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
     match code {
         OpCode::CmsgAuthSession => {
-            let str_end = buffer
+            let str_end = bytes
                 .iter()
                 .enumerate()
                 .skip(4 + 4)
@@ -78,8 +71,8 @@ fn read_packet(code: OpCode, buffer: &[u8]) -> Result<ClientPacket> {
                 .ok_or_else(|| anyhow!("could not find end of string"))?;
 
             let addon_start = str_end + 1 + 4 + 4 + 4 + 4 + 4 + 8 + 20;
-            let packet = &buffer[..addon_start];
-            let addons = &buffer[addon_start..];
+            let packet = &bytes[..addon_start];
+            let addons = &bytes[addon_start..];
 
             let (
                 build,
@@ -154,10 +147,46 @@ fn read_packet(code: OpCode, buffer: &[u8]) -> Result<ClientPacket> {
                 addons,
             }))
         }
+        OpCode::CmsgPing => {
+            let (seq, latency) = wow_bincode().deserialize(bytes)?;
+            Ok(ClientPacket::Ping { latency, seq })
+        }
         OpCode::CmsgReadyForAccountDataTimes => Ok(ClientPacket::ReadyForAccountDataTimes),
         OpCode::CmsgCharEnum => Ok(ClientPacket::CharEnum),
         // todo(arlyon): read this from the packet
         OpCode::CmsgRealmSplit => Ok(ClientPacket::RealmSplit { realm: 1 }),
+        OpCode::CmsgCharCreate => {
+            let (
+                name,
+                race,
+                class,
+                gender,
+                skin_color,
+                face,
+                hair_style,
+                hair_color,
+                facial_style,
+                outfit,
+            ) = wow_bincode().deserialize(bytes)?;
+
+            let _: u8 = outfit; // outfit isn't used
+
+            Ok(ClientPacket::CharacterCreate {
+                name,
+                race,
+                class,
+                gender,
+                skin_color,
+                face,
+                hair_style,
+                hair_color,
+                facial_style,
+            })
+        }
+        OpCode::CmsgPlayerLogin => Ok(ClientPacket::PlayerLogin(wow_bincode().deserialize(bytes)?)),
+        OpCode::CmsgCharDelete => Ok(ClientPacket::CharacterDelete(
+            wow_bincode().deserialize(bytes)?,
+        )),
         c => return Err(anyhow!("unsupported opcode: {:?}", c)),
     }
 }

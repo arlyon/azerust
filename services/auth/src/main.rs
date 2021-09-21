@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
                         email,
                     },
             } => {
-                let pool = MySqlPool::connect(&config?.login_database).await?;
+                let pool = MySqlPool::connect(&config?.auth_database).await?;
                 let accounts = MySQLAccountService::new(pool);
                 match accounts.create_account(&username, &password, &email).await {
                     Ok(id) => println!("created account {}", id),
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
                 bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
                 api_port: None,
-                login_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
+                auth_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
             };
             auth.write(&opts.config).await?;
         }
@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
 }
 
 async fn start_server(config: &AuthServerConfig) -> Result<()> {
-    let pool = MySqlPool::connect(&config.login_database).await?;
+    let pool = MySqlPool::connect(&config.auth_database).await?;
 
     debug!("Loaded config {:?}", config);
     let accounts = MySQLAccountService::new(pool.clone());

@@ -2,17 +2,18 @@
 name = "azerust-protocol"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-world = []
+world = ["rust-crypto"]
 auth = []
 
 [dependencies]
 azerust-game = { path = "../../crates/game" }
 derive_more = "0.99.16"
 num_enum = "0.5.4"
+rust-crypto = {version = "0.2.36", optional = true }
 serde = { version = "1.0.130", features = ["derive"] }

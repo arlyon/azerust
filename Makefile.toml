@@ -28,7 +28,7 @@ command = "cargo"
 args = ["run", "--bin", "azerust-auth", "config-auth.yaml", "${@}"]
 
 [env]
-RUST_LOG = "azerust_world,azerust_auth"
+RUST_LOG = "azerust_world,azerust_auth,ERROR"
 
 [config]
 default_to_workspace = false
