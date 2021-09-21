@@ -18,5 +18,6 @@
 )]
 
 pub mod accounts;
+pub mod characters;
 pub mod realms;
 pub mod types;

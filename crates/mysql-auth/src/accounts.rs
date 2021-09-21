@@ -103,7 +103,19 @@ impl AccountService for MySQLAccountService {
     }
 
     #[instrument(skip(self))]
-    async fn get_account(&self, username: &str) -> Result<Account, AccountOpError> {
+    async fn get(&self, id: AccountId) -> Result<Account, AccountOpError> {
+        sqlx::query_as!(
+            Account,
+            r#"SELECT id as "id: _", username, session_key_auth as "session_key: _",salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE id = ?"#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AccountOpError::PersistError(e.to_string()))
+    }
+
+    #[instrument(skip(self))]
+    async fn get_by_username(&self, username: &str) -> Result<Account, AccountOpError> {
         sqlx::query_as!(
             Account,
             r#"SELECT id as "id: _", username, session_key_auth as "session_key: _",salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE username = ?"#,
@@ -115,7 +127,7 @@ impl AccountService for MySQLAccountService {
     }
 
     async fn initiate_login(&self, username: &str) -> Result<ConnectToken, LoginFailure> {
-        let account = match self.get_account(username).await {
+        let account = match self.get_by_username(username).await {
             Ok(Account {
                 ban_status: Some(status),
                 username,

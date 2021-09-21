@@ -154,8 +154,10 @@ pub trait AccountService {
     /// information and characters.
     async fn delete_account(&self, id: AccountId) -> Result<(), AccountOpError>;
 
+    async fn get(&self, id: AccountId) -> Result<Account, AccountOpError>;
+
     /// Gets an account from the system by its username.
-    async fn get_account(&self, username: &str) -> Result<Account, AccountOpError>;
+    async fn get_by_username(&self, username: &str) -> Result<Account, AccountOpError>;
 
     /// Start a login in the system. This function returns a LoginVerifier
     /// which can be used to handle the second stage of the login.

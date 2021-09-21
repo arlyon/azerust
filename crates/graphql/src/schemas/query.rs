@@ -33,7 +33,7 @@ where
 
     async fn get_user(&self, ctx: &Context<'_>, username: String) -> FieldResult<Account> {
         let service = ctx.data::<A>()?;
-        let account = service.get_account(&username).await?;
+        let account = service.get_by_username(&username).await?;
         Ok(Account(account))
     }
 

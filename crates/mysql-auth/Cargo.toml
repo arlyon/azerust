@@ -1,5 +1,5 @@
 [package]
-name = "azerust-mysql"
+name = "azerust-mysql-auth"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2018"

@@ -16,7 +16,7 @@ use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::{Context, Result};
 use async_std::prelude::*;
-use azerust_mysql::{accounts::MySQLAccountService, realms::MySQLRealmList};
+use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;

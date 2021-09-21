@@ -18,7 +18,7 @@ human-panic = "1"
 structopt = "0.3"
 tracing = "0.1"
 azerust-game = { path = "../../crates/game" }
-azerust-mysql = { path = "../../crates/mysql" }
+azerust-mysql-auth = { path = "../../crates/mysql-auth" }
 azerust-protocol = { path = "../../crates/protocol", features = ["world"] }
 serde = "1"
 serde_yaml = "0.8"

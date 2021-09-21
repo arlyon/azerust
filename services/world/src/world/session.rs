@@ -31,7 +31,7 @@ use crate::{
 pub struct Session {
     /// keep the client id so we don't have to open the lock
     pub client_id: ClientId,
-    client: Arc<RwLock<Client>>,
+    pub client: Arc<RwLock<Client>>,
     stream: RwLock<TcpStream>,
     encryption: Mutex<HeaderCrypto>,
     sender: Sender<(ClientId, ClientPacket)>,

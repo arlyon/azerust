@@ -1,5 +1,441 @@
 {
   "db": "MySQL",
+  "f582e1d6c42043942af9191c90642a78ec62c6f81d294169014268cd4311717f": {
+    "query": "INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": []
+    },
+    "hash": "f582e1d6c42043942af9191c90642a78ec62c6f81d294169014268cd4311717f"
+  },
+  "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf": {
+    "query": "INSERT INTO account(username, salt, verifier, reg_mail, email, joindate) VALUES(?, ?, ?, ?, ?, NOW())",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 5
+      },
+      "nullable": []
+    },
+    "hash": "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf"
+  },
+  "7d596a80fe1d1014a5ce5a0463ccd2b1990f5b8aff6e9e853dc1a0911f9849d7": {
+    "query": "insert into realmlist(id, flag) values(?, ?) on duplicate key update flag = values(`flag`)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 2
+      },
+      "nullable": []
+    },
+    "hash": "7d596a80fe1d1014a5ce5a0463ccd2b1990f5b8aff6e9e853dc1a0911f9849d7"
+  },
+  "ec6577168c8d18ba07075b6bc370728c4868186413b69da6ff9a6bcbcf089876": {
+    "query": "SELECT a.id, a.username, a.locked, a.lock_country, a.last_ip, a.failed_logins, (ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate) as 'is_banned: bool', (ab.unbandate = ab.bandate) as 'is_permabanned: bool', aa.SecurityLevel as security_level, a.session_key_auth as session_key FROM account a LEFT JOIN account_access aa ON a.id = aa.AccountID LEFT JOIN account_banned ab ON ab.id = a.id AND ab.active = 1 WHERE a.username = ? AND a.session_key_auth IS NOT NULL",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "username",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "locked",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "lock_country",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 8
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "last_ip",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 60
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "failed_logins",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "is_banned: bool",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 1
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "is_permabanned: bool",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 1
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "security_level",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 4128
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "session_key",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 40
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "hash": "ec6577168c8d18ba07075b6bc370728c4868186413b69da6ff9a6bcbcf089876"
+  },
+  "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
+    "query": "SELECT id FROM account WHERE id = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false
+      ]
+    },
+    "hash": "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f"
+  },
+  "0d689f692367f4c7b096ef47376063af780de4fd145a2d5aefa4b8ec6745b548": {
+    "query": "SELECT guid as 'id: _', account as 'account: _', name, level, race, class, gender, skin as skin_color, face, hairStyle as hair_style, hairColor as hair_color, facialStyle as facial_style, zone, map, position_x, position_y, position_z FROM characters where guid = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 35
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "account: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 41
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "name",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 4233
+            },
+            "char_set": 224,
+            "max_size": 48
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "level",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "race",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "class",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "gender",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "skin_color",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "face",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "hair_style",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 10,
+          "name": "hair_color",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 11,
+          "name": "facial_style",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        },
+        {
+          "ordinal": 12,
+          "name": "zone",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 13,
+          "name": "map",
+          "type_info": {
+            "type": "Short",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 5
+          }
+        },
+        {
+          "ordinal": 14,
+          "name": "position_x",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        },
+        {
+          "ordinal": 15,
+          "name": "position_y",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        },
+        {
+          "ordinal": 16,
+          "name": "position_z",
+          "type_info": {
+            "type": "Float",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 63,
+            "max_size": 12
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 1
+      },
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "hash": "0d689f692367f4c7b096ef47376063af780de4fd145a2d5aefa4b8ec6745b548"
+  },
   "195af0dd90260b99218978c6f75ffb3d9c38f7d9a444999d86c5013500947c9b": {
     "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\",salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE username = ?",
     "describe": {
@@ -82,7 +518,7 @@
           "type_info": {
             "type": "Timestamp",
             "flags": {
-              "bits": 1153
+              "bits": 1185
             },
             "char_set": 63,
             "max_size": 19
@@ -94,7 +530,7 @@
           "type_info": {
             "type": "Timestamp",
             "flags": {
-              "bits": 128
+              "bits": 160
             },
             "char_set": 63,
             "max_size": 19
@@ -140,169 +576,8 @@
         true,
         false
       ]
-    }
-  },
-  "1cce816196f0aaa829aa95399cb668e8c6285319e19c95ba4a7e9c95a423b14b": {
-    "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\", salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online from account",
-    "describe": {
-      "columns": [
-        {
-          "ordinal": 0,
-          "name": "id: _",
-          "type_info": {
-            "type": "Long",
-            "flags": {
-              "bits": 547
-            },
-            "char_set": 63,
-            "max_size": 10
-          }
-        },
-        {
-          "ordinal": 1,
-          "name": "username",
-          "type_info": {
-            "type": "VarString",
-            "flags": {
-              "bits": 5
-            },
-            "char_set": 224,
-            "max_size": 128
-          }
-        },
-        {
-          "ordinal": 2,
-          "name": "session_key: _",
-          "type_info": {
-            "type": "String",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 40
-          }
-        },
-        {
-          "ordinal": 3,
-          "name": "salt: _",
-          "type_info": {
-            "type": "String",
-            "flags": {
-              "bits": 4225
-            },
-            "char_set": 63,
-            "max_size": 32
-          }
-        },
-        {
-          "ordinal": 4,
-          "name": "verifier: _",
-          "type_info": {
-            "type": "String",
-            "flags": {
-              "bits": 4225
-            },
-            "char_set": 63,
-            "max_size": 32
-          }
-        },
-        {
-          "ordinal": 5,
-          "name": "email",
-          "type_info": {
-            "type": "VarString",
-            "flags": {
-              "bits": 1
-            },
-            "char_set": 224,
-            "max_size": 1020
-          }
-        },
-        {
-          "ordinal": 6,
-          "name": "joindate",
-          "type_info": {
-            "type": "Timestamp",
-            "flags": {
-              "bits": 1153
-            },
-            "char_set": 63,
-            "max_size": 19
-          }
-        },
-        {
-          "ordinal": 7,
-          "name": "last_login",
-          "type_info": {
-            "type": "Timestamp",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 19
-          }
-        },
-        {
-          "ordinal": 8,
-          "name": "ban_status: _",
-          "type_info": {
-            "type": "Null",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 0
-          }
-        },
-        {
-          "ordinal": 9,
-          "name": "online",
-          "type_info": {
-            "type": "Tiny",
-            "flags": {
-              "bits": 33
-            },
-            "char_set": 63,
-            "max_size": 3
-          }
-        }
-      ],
-      "parameters": {
-        "Right": 0
-      },
-      "nullable": [
-        false,
-        false,
-        true,
-        false,
-        false,
-        false,
-        false,
-        true,
-        true,
-        false
-      ]
-    }
-  },
-  "2b2e8132419fcae71505ca06bfacc0c1a86a3f53c356fc84eef34a253a5ddb4a": {
-    "query": "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?",
-    "describe": {
-      "columns": [],
-      "parameters": {
-        "Right": 5
-      },
-      "nullable": []
-    }
-  },
-  "48bde0894213ddd3cf5fa30efa98249e515eaa3454612e70b5b47d42681ea2bf": {
-    "query": "INSERT INTO account(username, salt, verifier, reg_mail, email, joindate) VALUES(?, ?, ?, ?, ?, NOW())",
-    "describe": {
-      "columns": [],
-      "parameters": {
-        "Right": 5
-      },
-      "nullable": []
-    }
+    },
+    "hash": "195af0dd90260b99218978c6f75ffb3d9c38f7d9a444999d86c5013500947c9b"
   },
   "7a554c809e6c1d80a4f399dbabf9cc71c37fd3954daeb3acf16cc51d79e49f78": {
     "query": "SELECT id as 'id: _', name, icon as 'realm_type: _', gamebuild as build, address as 'external_address', localAddress as 'local_address: _', localSubnetMask as 'local_subnet_mask: _', port, flag as 'flags: _', timezone, population FROM realmlist WHERE flag <> 3 ORDER BY id",
@@ -457,50 +732,27 @@
         false,
         false
       ]
-    }
+    },
+    "hash": "7a554c809e6c1d80a4f399dbabf9cc71c37fd3954daeb3acf16cc51d79e49f78"
   },
-  "7d596a80fe1d1014a5ce5a0463ccd2b1990f5b8aff6e9e853dc1a0911f9849d7": {
-    "query": "insert into realmlist(id, flag) values(?, ?) on duplicate key update flag = values(`flag`)",
+  "2b2e8132419fcae71505ca06bfacc0c1a86a3f53c356fc84eef34a253a5ddb4a": {
+    "query": "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?",
     "describe": {
       "columns": [],
       "parameters": {
-        "Right": 2
+        "Right": 5
       },
       "nullable": []
-    }
+    },
+    "hash": "2b2e8132419fcae71505ca06bfacc0c1a86a3f53c356fc84eef34a253a5ddb4a"
   },
-  "c1626a3c543a88203aa8ad2a6946340ffa8a7099053e52651663517cd615762f": {
-    "query": "SELECT id FROM account WHERE id = ?",
+  "1cce816196f0aaa829aa95399cb668e8c6285319e19c95ba4a7e9c95a423b14b": {
+    "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\", salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online from account",
     "describe": {
       "columns": [
         {
           "ordinal": 0,
-          "name": "id",
-          "type_info": {
-            "type": "Long",
-            "flags": {
-              "bits": 547
-            },
-            "char_set": 63,
-            "max_size": 10
-          }
-        }
-      ],
-      "parameters": {
-        "Right": 1
-      },
-      "nullable": [
-        false
-      ]
-    }
-  },
-  "ec6577168c8d18ba07075b6bc370728c4868186413b69da6ff9a6bcbcf089876": {
-    "query": "SELECT a.id, a.username, a.locked, a.lock_country, a.last_ip, a.failed_logins, (ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate) as 'is_banned: bool', (ab.unbandate = ab.bandate) as 'is_permabanned: bool', aa.SecurityLevel as security_level, a.session_key_auth as session_key FROM account a LEFT JOIN account_access aa ON a.id = aa.AccountID LEFT JOIN account_banned ab ON ab.id = a.id AND ab.active = 1 WHERE a.username = ? AND a.session_key_auth IS NOT NULL",
-    "describe": {
-      "columns": [
-        {
-          "ordinal": 0,
-          "name": "id",
+          "name": "id: _",
           "type_info": {
             "type": "Long",
             "flags": {
@@ -524,91 +776,7 @@
         },
         {
           "ordinal": 2,
-          "name": "locked",
-          "type_info": {
-            "type": "Tiny",
-            "flags": {
-              "bits": 33
-            },
-            "char_set": 63,
-            "max_size": 3
-          }
-        },
-        {
-          "ordinal": 3,
-          "name": "lock_country",
-          "type_info": {
-            "type": "VarString",
-            "flags": {
-              "bits": 1
-            },
-            "char_set": 224,
-            "max_size": 8
-          }
-        },
-        {
-          "ordinal": 4,
-          "name": "last_ip",
-          "type_info": {
-            "type": "VarString",
-            "flags": {
-              "bits": 1
-            },
-            "char_set": 224,
-            "max_size": 60
-          }
-        },
-        {
-          "ordinal": 5,
-          "name": "failed_logins",
-          "type_info": {
-            "type": "Long",
-            "flags": {
-              "bits": 33
-            },
-            "char_set": 63,
-            "max_size": 10
-          }
-        },
-        {
-          "ordinal": 6,
-          "name": "is_banned: bool",
-          "type_info": {
-            "type": "LongLong",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 1
-          }
-        },
-        {
-          "ordinal": 7,
-          "name": "is_permabanned: bool",
-          "type_info": {
-            "type": "LongLong",
-            "flags": {
-              "bits": 128
-            },
-            "char_set": 63,
-            "max_size": 1
-          }
-        },
-        {
-          "ordinal": 8,
-          "name": "security_level",
-          "type_info": {
-            "type": "Tiny",
-            "flags": {
-              "bits": 4128
-            },
-            "char_set": 63,
-            "max_size": 3
-          }
-        },
-        {
-          "ordinal": 9,
-          "name": "session_key",
+          "name": "session_key: _",
           "type_info": {
             "type": "String",
             "flags": {
@@ -616,6 +784,233 @@
             },
             "char_set": 63,
             "max_size": 40
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "salt: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "verifier: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "email",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "joindate",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 1185
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "last_login",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 160
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "ban_status: _",
+          "type_info": {
+            "type": "Null",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 0
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "online",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
+          }
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false
+      ]
+    },
+    "hash": "1cce816196f0aaa829aa95399cb668e8c6285319e19c95ba4a7e9c95a423b14b"
+  },
+  "346dff44330e9b83ef3710c5ed8140137870e916b12a58a1fa7fea170000afd8": {
+    "query": "SELECT id as \"id: _\", username, session_key_auth as \"session_key: _\",salt as \"salt: _\", verifier as \"verifier: _\", email, joindate, last_login, NULL as \"ban_status: _\", online FROM account WHERE id = ?",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "id: _",
+          "type_info": {
+            "type": "Long",
+            "flags": {
+              "bits": 547
+            },
+            "char_set": 63,
+            "max_size": 10
+          }
+        },
+        {
+          "ordinal": 1,
+          "name": "username",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 5
+            },
+            "char_set": 224,
+            "max_size": 128
+          }
+        },
+        {
+          "ordinal": 2,
+          "name": "session_key: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 40
+          }
+        },
+        {
+          "ordinal": 3,
+          "name": "salt: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 4,
+          "name": "verifier: _",
+          "type_info": {
+            "type": "String",
+            "flags": {
+              "bits": 4225
+            },
+            "char_set": 63,
+            "max_size": 32
+          }
+        },
+        {
+          "ordinal": 5,
+          "name": "email",
+          "type_info": {
+            "type": "VarString",
+            "flags": {
+              "bits": 1
+            },
+            "char_set": 224,
+            "max_size": 1020
+          }
+        },
+        {
+          "ordinal": 6,
+          "name": "joindate",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 1185
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 7,
+          "name": "last_login",
+          "type_info": {
+            "type": "Timestamp",
+            "flags": {
+              "bits": 160
+            },
+            "char_set": 63,
+            "max_size": 19
+          }
+        },
+        {
+          "ordinal": 8,
+          "name": "ban_status: _",
+          "type_info": {
+            "type": "Null",
+            "flags": {
+              "bits": 128
+            },
+            "char_set": 63,
+            "max_size": 0
+          }
+        },
+        {
+          "ordinal": 9,
+          "name": "online",
+          "type_info": {
+            "type": "Tiny",
+            "flags": {
+              "bits": 33
+            },
+            "char_set": 63,
+            "max_size": 3
           }
         }
       ],
@@ -625,25 +1020,16 @@
       "nullable": [
         false,
         false,
+        true,
         false,
         false,
         false,
         false,
         true,
         true,
-        true,
-        true
+        false
       ]
-    }
-  },
-  "f582e1d6c42043942af9191c90642a78ec62c6f81d294169014268cd4311717f": {
-    "query": "INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL",
-    "describe": {
-      "columns": [],
-      "parameters": {
-        "Right": 0
-      },
-      "nullable": []
-    }
+    },
+    "hash": "346dff44330e9b83ef3710c5ed8140137870e916b12a58a1fa7fea170000afd8"
   }
 }

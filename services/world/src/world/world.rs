@@ -7,8 +7,7 @@ use async_std::{
     stream::{interval, Interval},
     sync::RwLock,
 };
-
-
+use azerust_game::accounts::AccountService;
 
 use super::Session;
 use crate::{
@@ -16,16 +15,18 @@ use crate::{
     protocol::{Addon, ClientPacket, ServerPacket},
 };
 
-pub struct World {
+pub struct World<A: AccountService> {
+    accounts: A,
     receiver: Receiver<(ClientId, ClientPacket)>,
     sender: Sender<(ClientId, ClientPacket)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
 }
 
-impl World {
-    pub fn new() -> Self {
+impl<A: AccountService> World<A> {
+    pub fn new(accounts: A) -> Self {
         let (sender, receiver) = unbounded();
-        World {
+        Self {
+            accounts,
             sender,
             receiver,
             sessions: Default::default(),
@@ -44,7 +45,7 @@ impl World {
     pub async fn handle_packets(&self) -> Result<()> {
         loop {
             let (id, packet) = self.receiver.recv().await?;
-            let client = {
+            let session = {
                 let sessions = self.sessions.read().await;
                 match sessions.get(&id).cloned() {
                     Some(c) => c,
@@ -54,18 +55,19 @@ impl World {
             match packet {
                 ClientPacket::AuthSession(_) => {} // ignore
                 ClientPacket::KeepAlive => {
-                    client.reset_timeout().await;
+                    session.reset_timeout().await;
                 }
                 ClientPacket::Ping { latency, ping } => {
-                    client.set_latency(latency).await;
-                    client.send_packet(&ServerPacket::Pong(ping)).await;
+                    session.set_latency(latency).await;
+                    session.send_packet(&ServerPacket::Pong(ping)).await;
                 }
 
                 ClientPacket::ReadyForAccountDataTimes => {
                     // todo
                 }
                 ClientPacket::CharEnum => {
-                    // get client
+                    let id = session.client.read().await.account.unwrap();
+                    let account = self.accounts.get(id).await.unwrap();
                     // get account
 
                     // get characters

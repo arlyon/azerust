@@ -36,7 +36,7 @@ pub struct WorldServer<A: AccountService, R: RealmList> {
     realm_id: u8,
     realm_seed: [u8; 4],
     clients: RwLock<HashMap<ClientId, Arc<RwLock<Client>>>>,
-    world: World,
+    world: World<A>,
 
     /// target number of milliseconds between world updates
     update_interval: u16,
@@ -45,16 +45,16 @@ pub struct WorldServer<A: AccountService, R: RealmList> {
     running: bool,
 }
 
-impl<A: AccountService, R: RealmList> WorldServer<A, R> {
+impl<A: AccountService + Clone, R: RealmList> WorldServer<A, R> {
     pub fn new(accounts: A, realms: R, auth_server_address: String, realm_id: u8) -> Self {
         Self {
+            world: World::new(accounts.clone()),
             accounts,
             realms,
             auth_server_address,
             realm_id,
             realm_seed: rand::thread_rng().gen(),
             clients: Default::default(),
-            world: World::new(),
 
             update_interval: 100,
             update_counter: AtomicU64::new(0),
@@ -199,9 +199,9 @@ impl<A: AccountService, R: RealmList> WorldServer<A, R> {
     }
 }
 
-async fn handle_auth_session(
+async fn handle_auth_session<A: AccountService>(
     stream: TcpStream,
-    world: &World,
+    world: &World<A>,
     client: Arc<RwLock<Client>>,
     auth_session: AuthSession,
     realm_id: u32,
@@ -221,7 +221,7 @@ async fn handle_auth_session(
     }
 
     let account = accounts
-        .get_account(&auth_session.username)
+        .get_by_username(&auth_session.username)
         .await
         .map_err(|_| ResponseCode::AuthUnknownAccount)?;
     trace!(

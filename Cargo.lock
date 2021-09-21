@@ -534,7 +534,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "azerust-game",
- "azerust-mysql",
+ "azerust-mysql-auth",
  "azerust-protocol",
  "azerust-tide",
  "bincode 2.0.0-dev",
@@ -588,7 +588,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "azerust-mysql"
+name = "azerust-mysql-auth"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -602,6 +602,19 @@ dependencies = [
  "tracing",
  "wow-srp",
 ]
+
+[[package]]
+name = "azerust-mysql-characters"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "azerust-game",
+ "sqlx",
+]
+
+[[package]]
+name = "azerust-mysql-world"
+version = "0.1.0"
 
 [[package]]
 name = "azerust-protocol"
@@ -632,7 +645,7 @@ dependencies = [
  "anyhow",
  "async-std",
  "azerust-game",
- "azerust-mysql",
+ "azerust-mysql-auth",
  "azerust-protocol",
  "bincode 2.0.0-dev",
  "derive_more",
