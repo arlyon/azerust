@@ -1,7 +1,9 @@
 [tasks.prepare]
 script = '''
 #!/usr/bin/env bash
-SQLX_OFFLINE=false cargo check --workspace
+rm -rf target/sqlx
+touch {services,crates}/*/src/*.rs
+env -u DATABASE_URL SQLX_OFFLINE=false cargo check --workspace
 jq -s '{"db": "MySQL"} + INDEX(.hash)' target/sqlx/query-*.json > sqlx-data.json
 '''
 
