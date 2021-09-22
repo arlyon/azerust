@@ -116,7 +116,7 @@ pub trait CharacterService {
     async fn get_by_account(&self, id: AccountId) -> Result<Vec<Character>, CharacterServiceError>;
     async fn account_data(&self, id: AccountId) -> Result<AccountData, CharacterServiceError>;
     async fn count_by_account(&self, id: AccountId) -> Result<usize, CharacterServiceError>;
-    async fn name_available(&self, name: &String) -> Result<bool, CharacterServiceError>;
+    async fn name_available(&self, name: &str) -> Result<bool, CharacterServiceError>;
     async fn create_character(
         &self,
         account: AccountId,

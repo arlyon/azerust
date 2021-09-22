@@ -57,7 +57,7 @@ impl CharacterService for MySQLCharacterService {
             .map_err(|e| CharacterServiceError::PersistError(e.to_string()))
     }
 
-    async fn name_available(&self, name: &String) -> Result<bool, CharacterServiceError> {
+    async fn name_available(&self, name: &str) -> Result<bool, CharacterServiceError> {
         query!("SELECT count(*) as c FROM characters where name = ?", name)
             .fetch_one(&self.pool)
             .await

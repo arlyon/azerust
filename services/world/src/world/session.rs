@@ -177,7 +177,7 @@ impl Session {
                             0u32, //
                             items,
                         ))
-                        .unwrap()
+                        .expect("data is correct")
                 });
 
                 self.write_packet(

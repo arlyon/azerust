@@ -255,6 +255,8 @@ impl ReplyPacket<()> {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
+
     use azerust_game::accounts::{Account, AccountId};
     use bincode::Options;
     use chrono::Utc;

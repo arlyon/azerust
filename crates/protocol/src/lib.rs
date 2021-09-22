@@ -102,7 +102,7 @@ pub enum ServerPacket {
     TutorialData,
     Pong(u32),
     CharEnum(Vec<(Character, [Item; 23])>),
-    AccountDataTimes(AccountData),
+    AccountDataTimes(Box<AccountData>),
     RealmSplit { realm: u32 },
     CharacterCreate(ResponseCode),
     CharacterDelete(ResponseCode),

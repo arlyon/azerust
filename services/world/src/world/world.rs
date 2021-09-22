@@ -58,14 +58,14 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
         let mut timers = WorldTimers::new();
 
         let uptime = async {
-            while let Some(_) = timers.uptime.next().await {
+            while timers.uptime.next().await.is_some() {
                 if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
                     error!("error when setting uptime: {}", e);
                 }
             }
         };
 
-        let ping_db = async { while let Some(_) = timers.ping_db.next().await {} };
+        let ping_db = async { while timers.ping_db.next().await.is_some() {} };
 
         uptime.join(ping_db).await;
         // todo(arlyon): update uptime and population
@@ -85,7 +85,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 }
             };
 
-            if let Err(_) = self.handle_packet(session, packet).await {
+            if self.handle_packet(session, packet).await.is_err() {
                 error!("could not handle packet from client {:?}", id);
             }
         }
@@ -111,7 +111,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 };
 
                 session
-                    .send_packet(ServerPacket::AccountDataTimes(data))
+                    .send_packet(ServerPacket::AccountDataTimes(Box::new(data)))
                     .await
             }
             ClientPacket::CharEnum => {
@@ -164,7 +164,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
 
                 if let Some(x) = match &name {
                     n if name_proper.ne(n) => Some(ResponseCode::CharNameFailure),
-                    n if n.len() == 0 => Some(ResponseCode::CharNameNoName),
+                    n if n.is_empty() => Some(ResponseCode::CharNameNoName),
                     n if n.len() < 2 => Some(ResponseCode::CharNameTooShort),
                     _ => None,
                 } {
