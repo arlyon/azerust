@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use async_std::prelude::*;
-use azerust_game::characters::Character;
+use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
@@ -87,8 +87,10 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
                 client_proof,
             ) = wow_bincode().deserialize(packet)?;
 
+            let realm_id = RealmId(realm_id);
+
             trace!(
-                "read auth session packet for {} on realm {}",
+                "read auth session packet for {} on realm {:?}",
                 username,
                 realm_id
             );

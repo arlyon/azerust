@@ -14,22 +14,20 @@ use async_std::{
     net::TcpStream,
     sync::{Mutex, RwLock},
 };
-use azerust_game::characters::{AccountData, Character};
+use azerust_game::characters::Character;
 use azerust_protocol::{
     header_crypto::HeaderCrypto,
     world::{OpCode, ResponseCode},
     Addon, ClientPacket, ClientVersion, ServerPacket,
 };
 use bincode::Options;
-use tracing::{instrument, trace};
+use tracing::trace;
 
 use crate::{
     client::{Client, ClientId},
     world::world::GLOBAL_CACHE_MASK,
     wow_bincode::wow_bincode,
 };
-
-const NUM_ACCOUNT_DATA_TYPES: usize = 8;
 
 /// An active session in the world.
 pub struct Session {

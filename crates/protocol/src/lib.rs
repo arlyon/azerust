@@ -1,5 +1,6 @@
 use azerust_game::{
-    characters::{AccountData, AccountDataCache, Character, CharacterCreate},
+    characters::{AccountData, Character},
+    realms::RealmId,
     WowId,
 };
 use num_enum::IntoPrimitive;
@@ -35,7 +36,7 @@ pub struct AuthSession {
     pub addons: Vec<Addon>,
 
     pub battlegroup_id: u32,
-    pub realm_id: u32,
+    pub realm_id: RealmId,
     pub dos_response: u64,
 }
 

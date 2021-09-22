@@ -1,15 +1,21 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::{anyhow, Context, Result};
 use async_std::{
     channel::{unbounded, Receiver, Sender},
     net::TcpStream,
+    prelude::*,
     stream::{interval, Interval},
     sync::RwLock,
 };
 use azerust_game::{
     accounts::AccountService,
     characters::{AccountData, CharacterCreate, CharacterService},
+    realms::{RealmId, RealmList},
 };
 use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
 use tracing::error;
@@ -19,29 +25,49 @@ use crate::client::{Client, ClientId};
 
 pub const GLOBAL_CACHE_MASK: u32 = 0x15;
 
-pub struct World<A: AccountService, C: CharacterService> {
+pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
+    id: RealmId,
     accounts: A,
+    realms: R,
     characters: C,
     receiver: Receiver<(ClientId, ClientPacket)>,
     sender: Sender<(ClientId, ClientPacket)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
+
+    start: SystemTime,
 }
 
-impl<A: AccountService, C: CharacterService> World<A, C> {
-    pub fn new(accounts: A, characters: C) -> Self {
+impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
+    pub fn new(id: RealmId, accounts: A, realms: R, characters: C) -> Self {
         let (sender, receiver) = unbounded();
         Self {
+            id,
             accounts,
+            realms,
             characters,
             sender,
             receiver,
             sessions: Default::default(),
+
+            start: SystemTime::now(),
         }
     }
 
     /// runs background tasks
     pub async fn timers(&self) -> Result<()> {
-        let _timers = WorldTimers::new();
+        let mut timers = WorldTimers::new();
+
+        let uptime = async {
+            while let Some(_) = timers.uptime.next().await {
+                if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
+                    error!("error when setting uptime: {}", e);
+                }
+            }
+        };
+
+        let ping_db = async { while let Some(_) = timers.ping_db.next().await {} };
+
+        uptime.join(ping_db).await;
         // todo(arlyon): update uptime and population
         // todo(arlyon): ping database
 

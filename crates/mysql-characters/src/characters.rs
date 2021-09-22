@@ -11,7 +11,7 @@ use azerust_game::{
 };
 use rand::Rng;
 use sqlx::{query, query_as, MySqlPool};
-use tracing::{debug, error, instrument};
+use tracing::{debug, instrument};
 
 pub struct MySQLCharacterService {
     pool: MySqlPool,

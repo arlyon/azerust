@@ -15,6 +15,7 @@
 use std::{net::Ipv4Addr, time::Duration};
 
 use anyhow::{Context, Result};
+use azerust_game::realms::RealmId;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use azerust_mysql_characters::MySQLCharacterService;
 use human_panic::setup_panic;
@@ -47,7 +48,7 @@ async fn main() -> Result<()> {
                 port: 3724,
                 auth_server_address: "localhost:1234".to_string(),
 
-                realm_id: 1,
+                realm_id: RealmId(1),
                 data_dir: 0,
 
                 character_database: "postgresql://postgres:postgres@localhost/postgres".to_string(),
@@ -78,11 +79,11 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
     let characters = MySQLCharacterService::new(character_pool.clone());
 
     let server = WorldServer::new(
+        config.realm_id,
         accounts,
         realms,
         characters,
         config.auth_server_address.clone(),
-        config.realm_id,
     );
     server.start().await
 }

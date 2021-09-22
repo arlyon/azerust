@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use async_std::{net::Ipv4Addr, path::PathBuf};
+use azerust_game::realms::RealmId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -13,7 +14,7 @@ pub struct WorldServerConfig {
     pub auth_database: String,
     pub world_database: String,
 
-    pub realm_id: u8,
+    pub realm_id: RealmId,
     pub data_dir: u32,
 }
 

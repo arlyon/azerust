@@ -3,12 +3,16 @@
 //! The realms module handles everything regarding managing
 //! realm and realmlists.
 
+use std::time::SystemTime;
+
 use async_trait::async_trait;
 use derive_more::{From, Into};
 use enumflags2::bitflags;
 use num_enum::IntoPrimitive;
+use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use strum_macros::ToString;
+use thiserror::Error;
 
 /// The various flags that a realm can have.
 /// They are implemented as BitFlags.
@@ -38,9 +42,9 @@ pub enum RealmType {
 }
 
 /// A marker for a realm id.
-#[derive(Type, Clone, Debug, From, Into, Copy)]
+#[derive(Type, Clone, Debug, From, Into, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[sqlx(transparent)]
-pub struct RealmId(u32);
+pub struct RealmId(pub u32);
 
 /// The basic realm object.
 #[derive(Clone, Debug)]
@@ -64,5 +68,25 @@ pub trait RealmList {
     /// Return the list of realms sorted by id.
     async fn realms(&self) -> Vec<Realm>;
 
-    async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> ();
+    async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> Result<(), RealmListError>;
+
+    /// Update the uptime counter for a server that started
+    /// at the given `start` time.
+    async fn set_uptime(
+        &self,
+        id: RealmId,
+        start: SystemTime,
+        population: u32,
+    ) -> Result<(), RealmListError>;
+}
+
+/// Errors that may occur when running realmlist operations.
+#[derive(Error, Debug)]
+pub enum RealmListError {
+    #[error("start time is in the future")]
+    StartTimeInFuture,
+    #[error("start time is too large to be stored")]
+    StartTimeTooLarge,
+    #[error("error in persistence layer: {0}")]
+    PersistError(String),
 }

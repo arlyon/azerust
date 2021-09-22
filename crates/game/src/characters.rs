@@ -125,7 +125,7 @@ pub trait CharacterService {
     async fn delete_character(&self, id: CharacterId) -> Result<(), CharacterServiceError>;
 }
 
-/// Errors that may occur when running account operations.
+/// Errors that may occur when running character operations.
 #[derive(Error, Debug)]
 pub enum CharacterServiceError {
     #[error("no such account {0:?}")]

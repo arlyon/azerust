@@ -15,7 +15,11 @@ use async_std::{
     stream,
     sync::RwLock,
 };
-use azerust_game::{accounts::AccountService, characters::CharacterService, realms::RealmList};
+use azerust_game::{
+    accounts::AccountService,
+    characters::CharacterService,
+    realms::{RealmId, RealmList},
+};
 use azerust_protocol::{
     world::{OpCode, ResponseCode},
     AuthSession, ClientPacket,
@@ -33,13 +37,13 @@ use crate::{
 };
 
 pub struct WorldServer<A: AccountService, R: RealmList, C: CharacterService> {
+    id: RealmId,
     accounts: A,
     realms: R,
     auth_server_address: String,
-    realm_id: u8,
     realm_seed: [u8; 4],
     clients: RwLock<HashMap<ClientId, Arc<RwLock<Client>>>>,
-    world: World<A, C>,
+    world: World<A, R, C>,
 
     /// target number of milliseconds between world updates
     update_interval: u16,
@@ -48,20 +52,20 @@ pub struct WorldServer<A: AccountService, R: RealmList, C: CharacterService> {
     running: bool,
 }
 
-impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A, R, C> {
+impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> WorldServer<A, R, C> {
     pub fn new(
+        realm_id: RealmId,
         accounts: A,
         realms: R,
         characters: C,
         auth_server_address: String,
-        realm_id: u8,
     ) -> Self {
         Self {
-            world: World::new(accounts.clone(), characters),
+            world: World::new(realm_id, accounts.clone(), realms.clone(), characters),
             accounts,
             realms,
             auth_server_address,
-            realm_id,
+            id: realm_id,
             realm_seed: rand::thread_rng().gen(),
             clients: Default::default(),
 
@@ -92,7 +96,7 @@ impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A
         while interval.next().await.is_some() {
             trace!("sending population heartbeat {}", population);
             let mut buffer = [0u8; 6];
-            wow_bincode().serialize_into(&mut buffer[..], &(0u8, self.realm_id, population))?;
+            wow_bincode().serialize_into(&mut buffer[..], &(0u8, self.id.0 as u8, population))?;
             if let Err(_e) = socket.send(&buffer).await {
                 warn!("could not send heartbeat to {}", self.auth_server_address);
             }
@@ -177,7 +181,7 @@ impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A
                             &self.world,
                             client.ok_or_else(|| anyhow!("no client with this id"))?,
                             auth_session,
-                            self.realm_id as u32,
+                            self.id,
                             &self.realm_seed,
                             &self.accounts,
                         )
@@ -208,18 +212,18 @@ impl<A: AccountService + Clone, R: RealmList, C: CharacterService> WorldServer<A
     }
 }
 
-async fn handle_auth_session<A: AccountService, C: CharacterService>(
+async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterService>(
     stream: TcpStream,
-    world: &World<A, C>,
+    world: &World<A, R, C>,
     client: Arc<RwLock<Client>>,
     auth_session: AuthSession,
-    realm_id: u32,
+    realm_id: RealmId,
     realm_seed: &[u8],
     accounts: &dyn AccountService,
 ) -> std::result::Result<Arc<Session>, ResponseCode> {
     if auth_session.realm_id != realm_id {
         debug!(
-            "user {} tried to log in to realm {}, but this is realm {}",
+            "user {} tried to log in to realm {}, but this is realm {:?}",
             auth_session.username, auth_session.server_id, realm_id
         );
         return Err(ResponseCode::RealmListRealmNotFound);

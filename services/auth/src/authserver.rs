@@ -136,7 +136,9 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 data
             };
             trace!("updating realm populations: {:?}", data);
-            self.realms.update_status(data).await;
+            if let Err(r) = self.realms.update_status(data).await {
+                error!("error while updating realm populations: {}", r);
+            }
         }
         Ok(())
     }
