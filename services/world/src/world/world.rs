@@ -16,7 +16,7 @@ use tokio::{
     net::TcpStream,
     sync::{
         mpsc::{unbounded_channel, UnboundedReceiver as Receiver, UnboundedSender as Sender},
-        RwLock,
+        Mutex, RwLock,
     },
     time::{interval, Interval},
 };
@@ -32,7 +32,7 @@ pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
     accounts: A,
     realms: R,
     characters: C,
-    receiver: Receiver<(ClientId, ClientPacket)>,
+    receiver: Mutex<Receiver<(ClientId, ClientPacket)>>,
     sender: Sender<(ClientId, ClientPacket)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
 
@@ -48,7 +48,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
             realms,
             characters,
             sender,
-            receiver,
+            receiver: Mutex::new(receiver),
             sessions: Default::default(),
 
             start: SystemTime::now(),
@@ -82,19 +82,20 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     }
 
     pub async fn handle_packets(&self) -> Result<()> {
+        let mut receiver = self.receiver.lock().await;
         loop {
-            // let (id, packet) = self.receiver.recv().await.ok_or(anyhow!("no packet"))?;
-            // let session = {
-            //     let sessions = self.sessions.read().await;
-            //     match sessions.get(&id).cloned() {
-            //         Some(c) => c,
-            //         None => continue,
-            //     }
-            // };
+            let (id, packet) = receiver.recv().await.ok_or(anyhow!("no packet"))?;
+            let session = {
+                let sessions = self.sessions.read().await;
+                match sessions.get(&id).cloned() {
+                    Some(c) => c,
+                    None => continue,
+                }
+            };
 
-            // if self.handle_packet(session, packet).await.is_err() {
-            //     error!("could not handle packet from client {:?}", id);
-            // }
+            if self.handle_packet(session, packet).await.is_err() {
+                error!("could not handle packet from client {:?}", id);
+            }
         }
         Ok(())
     }

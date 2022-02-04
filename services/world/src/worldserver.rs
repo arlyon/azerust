@@ -104,19 +104,21 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
     pub async fn accept_clients(&self) -> Result<()> {
         let addr = ("0.0.0.0", 8085);
         let listener = TcpListener::bind(&addr).await?;
-        let mut rng = rand::thread_rng();
 
         info!("listening on {:?}", &addr);
 
         let mut connections = TcpListenerStream::new(listener).filter_map(|s| s.ok());
         while let Some(mut stream) = connections.next().await {
-            let id = ClientId(rng.gen());
+            let (id, challenge): (ClientId, [u8; 32]) = {
+                let mut rng = rand::thread_rng();
+                rng.gen()
+            };
+
             self.clients
                 .write()
                 .await
                 .insert(id, Arc::new(RwLock::new(Client { id, account: None })));
 
-            let challenge: [u8; 32] = rng.gen();
             let packet = (
                 42u16.swap_bytes(),
                 OpCode::SmsgAuthChallenge,

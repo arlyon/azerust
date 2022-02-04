@@ -104,11 +104,11 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
             .spawn(async move {
                 a.auth_server_heartbeat().await;
             }),
-        // tokio::task::Builder::new()
-        //     .name("world::clients")
-        //     .spawn(async move {
-        //         b.accept_clients().await;
-        //     }),
+        tokio::task::Builder::new()
+            .name("world::clients")
+            .spawn(async move {
+                b.accept_clients().await;
+            }),
         tokio::task::Builder::new()
             .name("world::update")
             .spawn(async move {
