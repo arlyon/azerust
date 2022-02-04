@@ -139,7 +139,7 @@ impl ReconnectToken {
 
 /// An account service handles all the business logic for accounts.
 #[async_trait]
-pub trait AccountService {
+pub trait AccountService: Send + Sync {
     async fn list_account(&self) -> Result<Vec<Account>, AccountFetchError>;
 
     /// Creates a new account in the system.

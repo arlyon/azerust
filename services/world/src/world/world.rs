@@ -82,20 +82,20 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     }
 
     pub async fn handle_packets(&self) -> Result<()> {
-        // loop {
-        //     let (id, packet) = self.receiver.recv().await.ok_or(anyhow!("no packet"))?;
-        //     let session = {
-        //         let sessions = self.sessions.read().await;
-        //         match sessions.get(&id).cloned() {
-        //             Some(c) => c,
-        //             None => continue,
-        //         }
-        //     };
+        loop {
+            // let (id, packet) = self.receiver.recv().await.ok_or(anyhow!("no packet"))?;
+            // let session = {
+            //     let sessions = self.sessions.read().await;
+            //     match sessions.get(&id).cloned() {
+            //         Some(c) => c,
+            //         None => continue,
+            //     }
+            // };
 
-        //     if self.handle_packet(session, packet).await.is_err() {
-        //         error!("could not handle packet from client {:?}", id);
-        //     }
-        // }
+            // if self.handle_packet(session, packet).await.is_err() {
+            //     error!("could not handle packet from client {:?}", id);
+            // }
+        }
         Ok(())
     }
 

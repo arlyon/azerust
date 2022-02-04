@@ -88,18 +88,8 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         }
     }
 
-    /// Start the server, handling requests on the provided host and port.
-    pub async fn start(&self, host: Ipv4Addr, port: u16) -> Result<()> {
-        try_join!(
-            self.authentication(host, port),
-            self.world_server_heartbeat(host),
-            self.realmlist_updater()
-        )
-        .map(|_| ())
-    }
-
     #[instrument(skip(self, host))]
-    async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
+    pub async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
         // todo(arlyon): change the world server listen port
         let socket = tokio::net::UdpSocket::bind((host, 1234)).await?;
 
@@ -128,8 +118,8 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
     /// updates the realmlist based on recently received heartbeats
     #[instrument(skip(self))]
-    async fn realmlist_updater(&self) -> Result<()> {
-        let instant = iter(iter::once(Instant::now()).cycle());
+    pub async fn realmlist_updater(&self) -> Result<()> {
+        let instant = iter(iter::from_fn(|| Some(Instant::now())));
         let mut interval = IntervalStream::new(interval(time::Duration::from_secs(5))).zip(instant);
         while let Some((_, now)) = interval.next().await {
             let data = {
@@ -137,7 +127,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 let mut data = Vec::with_capacity(write.len());
                 data.extend(
                     write
-                        .drain_filter(|_, v| now.duration_since(*v).as_secs() > 15)
+                        .drain_filter(|_, v| now.saturating_duration_since(*v).as_secs() > 15)
                         .map(|(k, _)| (k, RealmFlags::Offline)),
                 );
                 data.extend(write.keys().map(|&k| (k, RealmFlags::Recommended)));
@@ -152,7 +142,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     }
 
     #[instrument(skip(self, host, port))]
-    async fn authentication(&self, host: Ipv4Addr, port: u16) -> Result<()> {
+    pub async fn authentication(&self, host: Ipv4Addr, port: u16) -> Result<()> {
         let addr = (host, port);
         let listener = TcpListener::bind(&addr).await?;
 

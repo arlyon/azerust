@@ -49,7 +49,7 @@ pub struct WorldServer<A: AccountService, R: RealmList, C: CharacterService> {
     auth_server_address: String,
     realm_seed: [u8; 4],
     clients: RwLock<HashMap<ClientId, Arc<RwLock<Client>>>>,
-    world: World<A, R, C>,
+    pub world: World<A, R, C>,
 
     /// target number of milliseconds between world updates
     update_interval: u16,
@@ -79,17 +79,6 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
             update_counter: AtomicU64::new(0),
             running: true,
         }
-    }
-
-    pub async fn start(&self) -> Result<()> {
-        try_join!(
-            self.auth_server_heartbeat(),
-            self.accept_clients(),
-            self.update(),
-            self.world.handle_packets(),
-            self.world.timers()
-        )
-        .map(|_| ())
     }
 
     #[instrument(skip(self))]
