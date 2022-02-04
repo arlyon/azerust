@@ -13,17 +13,20 @@
     clippy::unimplemented
 )]
 
-use std::{net::Ipv4Addr, time::Duration};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
 use anyhow::{anyhow, Result};
-use async_std::prelude::*;
+use azerust_axum::api;
 use azerust_game::accounts::AccountService;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
-use azerust_tide::api;
 use conf::AuthServerConfig;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
+use tokio::try_join;
 use tracing::debug;
 
 use crate::{
@@ -37,7 +40,7 @@ mod opt;
 mod protocol;
 mod wow_bincode;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     setup_panic!();
     tracing_subscriber::fmt::init();
@@ -89,14 +92,10 @@ async fn start_server(config: &AuthServerConfig) -> Result<()> {
     let run = server.start(config.bind_address, config.port);
 
     if let Some(api_port) = config.api_port {
-        let api = api(
-            (config.bind_address.to_string(), api_port),
-            accounts.clone(),
-            realms.clone(),
-        );
+        let addr = SocketAddr::new(config.bind_address.into(), api_port);
+        let api = api(&addr, accounts.clone(), realms.clone());
 
-        run.try_join(async { api.await.map_err(|e| anyhow!(e)) })
-            .await?;
+        try_join!(run, async { api.await.map_err(|e| anyhow!("bad api")) })?;
     } else {
         run.await?;
     }

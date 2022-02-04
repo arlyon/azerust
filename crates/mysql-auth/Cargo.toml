@@ -13,6 +13,6 @@ wow-srp = { path = "../wow-srp" }
 azerust-game = { path = "../game" }
 lazy_static = "1.4"
 rand = "0.8"
-async-std = "1.8"
 sha-1 = "0.9"
 chrono = "0.4.19"
+tokio = "1"

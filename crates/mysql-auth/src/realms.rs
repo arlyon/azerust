@@ -3,10 +3,10 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use async_std::{prelude::FutureExt, sync::RwLock};
 use async_trait::async_trait;
 use azerust_game::realms::{Realm, RealmFlags, RealmId, RealmList, RealmListError};
 use sqlx::{query, query_as, MySqlPool};
+use tokio::sync::RwLock;
 use tracing::{debug, trace};
 
 #[derive(Clone)]
@@ -41,7 +41,7 @@ impl RealmList for MySQLRealmList {
             )
             .fetch_all(&self.pool)
             .await {
-                let (mut self_realms, mut self_next_update) = self.realms.write().join(self.next_update.write()).await;
+                let (mut self_realms, mut self_next_update) = tokio::join!(self.realms.write(), self.next_update.write());
                 *self_realms = realms;
                 *self_next_update = now + self.update_interval;
             }

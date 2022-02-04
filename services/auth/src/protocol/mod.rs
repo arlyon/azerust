@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 
-use async_std::prelude::*;
 use azerust_protocol::auth::AuthCommand;
 use bincode::Options;
 use derive_more::Display;
 use num_enum::TryFromPrimitiveError;
 use thiserror::Error;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::{instrument, trace};
 
 use self::packets::{ConnectProof, ConnectRequest, RealmListRequest, ReconnectProof};
@@ -57,7 +57,7 @@ pub enum MessageParseError {
 }
 
 #[instrument(skip(stream))]
-pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
+pub async fn read_packet<R: AsyncRead + std::fmt::Debug + Unpin>(
     stream: &mut R,
 ) -> Result<Message, PacketHandleError> {
     let mut bytes = [0u8; 128];
@@ -105,7 +105,7 @@ pub enum PacketHandleError {
     MessageLength(usize, usize),
 
     #[error("error while reading packet: {0}")]
-    IoRead(#[from] async_std::io::Error),
+    IoRead(#[from] tokio::io::Error),
 
     #[error("command is invalid: {0}")]
     InvalidCommand(#[from] TryFromPrimitiveError<AuthCommand>),

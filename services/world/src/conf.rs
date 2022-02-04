@@ -1,5 +1,6 @@
+use std::{net::Ipv4Addr, path::PathBuf};
+
 use anyhow::{Context, Result};
-use async_std::{net::Ipv4Addr, path::PathBuf};
 use azerust_game::realms::RealmId;
 use serde::{Deserialize, Serialize};
 

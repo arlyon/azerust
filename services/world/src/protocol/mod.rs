@@ -4,22 +4,26 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Result};
-use async_std::prelude::*;
 use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    net::TcpStream,
+    sync::RwLock,
+};
 use tracing::trace;
 
 use crate::{world::Session, wow_bincode::wow_bincode};
 
 /// Reads one or more packets from a frame in the stream
-pub async fn read_packets<R: async_std::io::Read + std::fmt::Debug + Unpin>(
-    stream: &mut R,
+pub async fn read_packets(
+    stream: Arc<RwLock<TcpStream>>,
     session: &Option<Arc<Session>>,
 ) -> Result<Vec<ClientPacket>> {
     let mut buffer = [0u8; 2048];
-    let read_len = stream.read(&mut buffer).await?;
+    let read_len = stream.write().await.read(&mut buffer).await?;
 
     if read_len == 0 {
         bail!("connection closed");

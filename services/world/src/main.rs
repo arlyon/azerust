@@ -33,7 +33,7 @@ mod world;
 mod worldserver;
 mod wow_bincode;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     setup_panic!();
     tracing_subscriber::fmt::init();

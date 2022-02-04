@@ -9,12 +9,6 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Result};
-use async_std::{
-    net::{TcpListener, TcpStream, UdpSocket},
-    prelude::*,
-    stream,
-    sync::RwLock,
-};
 use azerust_game::{
     accounts::AccountService,
     characters::CharacterService,
@@ -27,6 +21,18 @@ use azerust_protocol::{
 use bincode::Options;
 use rand::Rng;
 use sha1::Digest;
+use tokio::{
+    io::AsyncWriteExt,
+    net::{TcpListener, TcpStream, UdpSocket},
+    stream,
+    sync::RwLock,
+    time::interval,
+    try_join,
+};
+use tokio_stream::{
+    wrappers::{IntervalStream, TcpListenerStream},
+    StreamExt,
+};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
@@ -76,13 +82,14 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
     }
 
     pub async fn start(&self) -> Result<()> {
-        self.auth_server_heartbeat()
-            .try_join(self.accept_clients())
-            .try_join(self.update())
-            .try_join(self.world.handle_packets())
-            .try_join(self.world.timers())
-            .await
-            .map(|_| ())
+        try_join!(
+            self.auth_server_heartbeat(),
+            self.accept_clients(),
+            self.update(),
+            self.world.handle_packets(),
+            self.world.timers()
+        )
+        .map(|_| ())
     }
 
     #[instrument(skip(self))]
@@ -92,8 +99,9 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
 
         let population = 0u32;
 
-        let mut interval = stream::interval(Duration::from_secs(5));
-        while interval.next().await.is_some() {
+        let mut interval = interval(Duration::from_secs(5));
+        loop {
+            interval.tick().await;
             trace!("sending population heartbeat {}", population);
             let mut buffer = [0u8; 6];
             wow_bincode().serialize_into(&mut buffer[..], &(0u8, self.id.0 as u8, population))?;
@@ -101,8 +109,6 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                 warn!("could not send heartbeat to {}", self.auth_server_address);
             }
         }
-
-        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -113,7 +119,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
 
         info!("listening on {:?}", &addr);
 
-        let mut connections = listener.incoming().filter_map(|s| s.ok());
+        let mut connections = TcpListenerStream::new(listener).filter_map(|s| s.ok());
         while let Some(mut stream) = connections.next().await {
             let id = ClientId(rng.gen());
             self.clients
@@ -131,7 +137,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
             );
             stream.write(&wow_bincode().serialize(&packet)?).await?;
 
-            if let Err(e) = self.connect_loop(&mut stream, id).await {
+            if let Err(e) = self.connect_loop(Arc::new(RwLock::new(stream)), id).await {
                 error!("error handling request: {}", e);
             }
 
@@ -143,8 +149,9 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
 
     #[instrument(skip(self))]
     pub async fn update(&self) -> Result<()> {
-        let mut interval = stream::interval(Duration::from_millis(self.update_interval.into()))
-            .take_while(|_| self.running);
+        let mut interval =
+            IntervalStream::new(interval(Duration::from_millis(self.update_interval.into())))
+                .take_while(|_| self.running);
 
         let mut prev_time = Instant::now();
         while interval.next().await.is_some() {
@@ -165,12 +172,16 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
     /// handles authentication, WorldSession creation,
     /// and pipes packets into the World
     #[instrument(skip(self, stream))]
-    async fn connect_loop(&self, stream: &mut TcpStream, client_id: ClientId) -> Result<()> {
+    async fn connect_loop(
+        &self,
+        stream: Arc<RwLock<TcpStream>>,
+        client_id: ClientId,
+    ) -> Result<()> {
         let mut session = None;
         debug!("accepting packets from {:?}", client_id);
 
         loop {
-            let packets = read_packets(stream, &session).await?;
+            let packets = read_packets(stream.clone(), &session).await?;
             for packet in packets {
                 trace!("received message {:?}", packet);
                 match (&session, packet) {
@@ -192,6 +203,8 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                             }
                             Err(c) => {
                                 stream
+                                    .write()
+                                    .await
                                     .write(&wow_bincode().serialize(&(
                                         6u16.swap_bytes(),
                                         OpCode::SmsgAuthResponse,
@@ -203,7 +216,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                         }
                     }
                     (Some(w), packet) => {
-                        w.reset_timeout().try_join(w.receive_packet(packet)).await?;
+                        try_join!(w.reset_timeout(), w.receive_packet(packet))?;
                     }
                     _ => bail!("unhandled state, disconnecting"),
                 }
@@ -213,7 +226,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
 }
 
 async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterService>(
-    stream: TcpStream,
+    stream: Arc<RwLock<TcpStream>>,
     world: &World<A, R, C>,
     client: Arc<RwLock<Client>>,
     auth_session: AuthSession,

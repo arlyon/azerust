@@ -1,18 +1,12 @@
 use std::{
     collections::HashMap,
-    fmt,
+    fmt, iter,
     net::Ipv4Addr,
     str,
     time::{self, Instant},
 };
 
 use anyhow::{anyhow, bail, Result};
-use async_std::{
-    net::{TcpListener, TcpStream},
-    prelude::*,
-    stream::{self, StreamExt},
-    sync::RwLock,
-};
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
@@ -21,6 +15,19 @@ use azerust_protocol::auth::{AuthCommand, ReturnCode};
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
+use futures_util::StreamExt;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+    stream::{self},
+    sync::RwLock,
+    time::interval,
+    try_join,
+};
+use tokio_stream::{
+    iter,
+    wrappers::{IntervalStream, TcpListenerStream},
+};
 use tracing::{debug, error, info, instrument, trace};
 
 use crate::{
@@ -83,17 +90,18 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
     /// Start the server, handling requests on the provided host and port.
     pub async fn start(&self, host: Ipv4Addr, port: u16) -> Result<()> {
-        self.authentication(host, port)
-            .try_join(self.world_server_heartbeat(host))
-            .try_join(self.realmlist_updater())
-            .await
-            .map(|_| ())
+        try_join!(
+            self.authentication(host, port),
+            self.world_server_heartbeat(host),
+            self.realmlist_updater()
+        )
+        .map(|_| ())
     }
 
     #[instrument(skip(self, host))]
     async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
         // todo(arlyon): change the world server listen port
-        let socket = async_std::net::UdpSocket::bind((host, 1234)).await?;
+        let socket = tokio::net::UdpSocket::bind((host, 1234)).await?;
 
         let mut buffer = [0u8; 6];
         loop {
@@ -121,8 +129,8 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     /// updates the realmlist based on recently received heartbeats
     #[instrument(skip(self))]
     async fn realmlist_updater(&self) -> Result<()> {
-        let instant = stream::from_fn(|| Some(Instant::now()));
-        let mut interval = stream::interval(time::Duration::from_secs(5)).zip(instant);
+        let instant = iter(iter::once(Instant::now()).cycle());
+        let mut interval = IntervalStream::new(interval(time::Duration::from_secs(5))).zip(instant);
         while let Some((_, now)) = interval.next().await {
             let data = {
                 let mut write = self.heartbeat.write().await;
@@ -150,8 +158,8 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
         info!("listening on {:?}", &addr);
 
-        let mut connections = listener.incoming().filter_map(|s| s.ok());
-        while let Some(mut stream) = connections.next().await {
+        let mut connections = TcpListenerStream::new(listener);
+        while let Some(Ok(mut stream)) = connections.next().await {
             if let Err(e) = self.connect_loop(&mut stream).await {
                 error!("error handling request: {}", e)
             }

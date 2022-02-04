@@ -8,12 +8,6 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use async_std::{
-    channel::Sender,
-    io::WriteExt,
-    net::TcpStream,
-    sync::{Mutex, RwLock},
-};
 use azerust_game::characters::Character;
 use azerust_protocol::{
     header_crypto::HeaderCrypto,
@@ -21,6 +15,11 @@ use azerust_protocol::{
     Addon, ClientPacket, ClientVersion, ServerPacket,
 };
 use bincode::Options;
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpStream,
+    sync::{mpsc::UnboundedSender as Sender, Mutex, RwLock},
+};
 use tracing::trace;
 
 use crate::{
@@ -34,7 +33,7 @@ pub struct Session {
     /// keep the client id so we don't have to open the lock
     pub client_id: ClientId,
     pub client: Arc<RwLock<Client>>,
-    stream: RwLock<TcpStream>,
+    stream: Arc<RwLock<TcpStream>>,
     encryption: Mutex<HeaderCrypto>,
     sender: Sender<(ClientId, ClientPacket)>,
     latency: AtomicU32,
@@ -47,7 +46,7 @@ pub struct Session {
 impl Session {
     pub async fn new(
         client: Arc<RwLock<Client>>,
-        stream: TcpStream,
+        stream: Arc<RwLock<TcpStream>>,
         session_key: [u8; 40],
         sender: Sender<(ClientId, ClientPacket)>,
         addons: Vec<Addon>,
@@ -56,7 +55,7 @@ impl Session {
         let x = Self {
             client,
             client_id,
-            stream: RwLock::new(stream),
+            stream,
             encryption: Mutex::new(HeaderCrypto::new(session_key)),
             sender,
             addons,
@@ -89,7 +88,7 @@ impl Session {
     pub async fn receive_packet(&self, p: ClientPacket) -> Result<()> {
         self.sender
             .send((self.client_id, p))
-            .await
+            // .await
             .context("couldnt send packet")
     }
 

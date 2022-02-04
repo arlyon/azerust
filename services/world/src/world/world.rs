@@ -5,19 +5,21 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use async_std::{
-    channel::{unbounded, Receiver, Sender},
-    net::TcpStream,
-    prelude::*,
-    stream::{interval, Interval},
-    sync::RwLock,
-};
 use azerust_game::{
     accounts::AccountService,
     characters::{AccountData, CharacterCreate, CharacterService},
     realms::{RealmId, RealmList},
 };
 use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
+use tokio::{
+    join,
+    net::TcpStream,
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver as Receiver, UnboundedSender as Sender},
+        RwLock,
+    },
+    time::{interval, Interval},
+};
 use tracing::error;
 
 use super::Session;
@@ -39,7 +41,7 @@ pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
 
 impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub fn new(id: RealmId, accounts: A, realms: R, characters: C) -> Self {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = unbounded_channel();
         Self {
             id,
             accounts,
@@ -58,16 +60,21 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
         let mut timers = WorldTimers::new();
 
         let uptime = async {
-            while timers.uptime.next().await.is_some() {
+            loop {
+                timers.uptime.tick().await;
                 if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
                     error!("error when setting uptime: {}", e);
                 }
             }
         };
 
-        let ping_db = async { while timers.ping_db.next().await.is_some() {} };
+        let ping_db = async {
+            loop {
+                timers.ping_db.tick().await;
+            }
+        };
 
-        uptime.join(ping_db).await;
+        join!(ping_db, uptime);
         // todo(arlyon): update uptime and population
         // todo(arlyon): ping database
 
@@ -75,20 +82,21 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     }
 
     pub async fn handle_packets(&self) -> Result<()> {
-        loop {
-            let (id, packet) = self.receiver.recv().await?;
-            let session = {
-                let sessions = self.sessions.read().await;
-                match sessions.get(&id).cloned() {
-                    Some(c) => c,
-                    None => continue,
-                }
-            };
+        // loop {
+        //     let (id, packet) = self.receiver.recv().await.ok_or(anyhow!("no packet"))?;
+        //     let session = {
+        //         let sessions = self.sessions.read().await;
+        //         match sessions.get(&id).cloned() {
+        //             Some(c) => c,
+        //             None => continue,
+        //         }
+        //     };
 
-            if self.handle_packet(session, packet).await.is_err() {
-                error!("could not handle packet from client {:?}", id);
-            }
-        }
+        //     if self.handle_packet(session, packet).await.is_err() {
+        //         error!("could not handle packet from client {:?}", id);
+        //     }
+        // }
+        Ok(())
     }
 
     pub async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
@@ -241,7 +249,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn create_session(
         &self,
         client: Arc<RwLock<Client>>,
-        stream: TcpStream,
+        stream: Arc<RwLock<TcpStream>>,
         session_key: [u8; 40],
         addons: Vec<Addon>,
     ) -> Result<Arc<Session>> {
