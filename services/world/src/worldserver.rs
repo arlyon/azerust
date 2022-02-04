@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use async_std::{
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::*,
@@ -198,14 +198,14 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                                         c,
                                     ))?)
                                     .await?;
-                                return Err(anyhow!("client failed to authenticate"));
+                                bail!("client failed to authenticate")
                             }
                         }
                     }
                     (Some(w), packet) => {
                         w.reset_timeout().try_join(w.receive_packet(packet)).await?;
                     }
-                    _ => return Err(anyhow!("unhandled state, disconnecting")),
+                    _ => bail!("unhandled state, disconnecting"),
                 }
             }
         }

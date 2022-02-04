@@ -7,16 +7,16 @@ use serde::Serialize;
 #[derive(TryFromPrimitive, IntoPrimitive, Debug, Serialize, PartialEq, Eq, Clone, Copy)]
 #[serde(into = "u8")]
 pub enum AuthCommand {
-    ConnectRequest = 0x00,
-    AuthLogonProof = 0x01,
-    AuthReconnectChallenge = 0x02,
-    AuthReconnectProof = 0x03,
+    Connect = 0x00,
+    Proof = 0x01,
+    ReConnect = 0x02,
+    ReProof = 0x03,
     RealmList = 0x10,
-    TransferInitiate = 0x30,
-    TransferData = 0x31,
-    TransferAccept = 0x32,
-    TransferResume = 0x33,
-    TransferCancel = 0x34,
+    // TransferInitiate = 0x30,
+    // TransferData = 0x31,
+    // TransferAccept = 0x32,
+    // TransferResume = 0x33,
+    // TransferCancel = 0x34,
 }
 
 /// All the known return codes from the API

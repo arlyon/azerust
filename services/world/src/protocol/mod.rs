@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use async_std::prelude::*;
 use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
@@ -22,7 +22,7 @@ pub async fn read_packets<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     let read_len = stream.read(&mut buffer).await?;
 
     if read_len == 0 {
-        return Err(anyhow!("connection closed"));
+        bail!("connection closed");
     }
 
     let mut buffer = &buffer[..read_len];
@@ -102,11 +102,11 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
                 let mut unzipped = Vec::with_capacity(expected_size);
                 let size = decoder.read_to_end(&mut unzipped)?;
                 if size != expected_size {
-                    return Err(anyhow!(
+                    bail!(
                         "addon data not correctly decompressed, expected length {} got {}",
                         expected_size,
                         size
-                    ));
+                    )
                 }
 
                 trace!("decoded addons: {:02X?}", &unzipped);
@@ -189,6 +189,6 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
         OpCode::CmsgCharDelete => Ok(ClientPacket::CharacterDelete(
             wow_bincode().deserialize(bytes)?,
         )),
-        c => return Err(anyhow!("unsupported opcode: {:?}", c)),
+        c => bail!("unsupported opcode: {:?}", c),
     }
 }

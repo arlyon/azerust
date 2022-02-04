@@ -1,4 +1,4 @@
-#![feature(hash_drain_filter)]
+#![feature(hash_drain_filter, arbitrary_enum_discriminant)]
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,

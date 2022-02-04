@@ -6,7 +6,7 @@ use std::{
     time::{self, Instant},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use async_std::{
     net::{TcpListener, TcpStream},
     prelude::*,
@@ -168,25 +168,25 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
             let message = read_packet(stream).await?;
             debug!("received message {} in state {}", message, state);
             state = match (state, message) {
-                (_, Message::ConnectRequest(r)) => {
+                (_, Message::Connect(r)) => {
                     handle_connect_request(&r, &self.accounts, stream).await?
                 }
-                (_, Message::ReconnectRequest(r)) => {
+                (_, Message::ReConnect(r)) => {
                     handle_reconnect_request(&r, &self.accounts, stream).await?
                 }
-                (RequestState::ConnectChallenge { token }, Message::ConnectProof(proof)) => {
+                (RequestState::ConnectChallenge { token }, Message::Proof(proof)) => {
                     handle_connect_proof(&proof, &self.accounts, &token, stream).await?
                 }
-                (RequestState::ReconnectChallenge { token }, Message::ReconnectProof(proof)) => {
+                (RequestState::ReconnectChallenge { token }, Message::ReProof(proof)) => {
                     handle_reconnect_proof(&proof, &self.accounts, &token, stream).await?
                 }
                 (RequestState::Realmlist, Message::RealmList(_)) => {
                     handle_realmlist(&self.realms, stream).await?
                 }
-                (_, Message::ConnectProof(_) | Message::ReconnectProof(_)) => {
-                    return Err(anyhow!("received proof before request, closing connection"))
+                (_, Message::Proof(_) | Message::ReProof(_)) => {
+                    bail!("received proof before request")
                 }
-                _ => return Err(anyhow!("received message in bad state, closing connection")),
+                _ => bail!("received message in bad state"),
             };
 
             if let RequestState::Rejected { command, reason } = state {
@@ -210,7 +210,7 @@ async fn handle_connect_request(
 ) -> Result<RequestState> {
     if request.build != 12340 {
         return Ok(RequestState::Rejected {
-            command: AuthCommand::ConnectRequest,
+            command: AuthCommand::Connect,
             reason: ReturnCode::VersionInvalid,
         });
     };
@@ -224,7 +224,7 @@ async fn handle_connect_request(
             Err(e) => {
                 debug!("user connected with invalid username: {}", e);
                 return Ok(RequestState::Rejected {
-                    command: AuthCommand::ConnectRequest,
+                    command: AuthCommand::Connect,
                     reason: ReturnCode::Failed,
                 });
             }
@@ -237,7 +237,7 @@ async fn handle_connect_request(
         Ok(token) => (RequestState::ConnectChallenge { token }, token.into()),
         Err(reason) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::ConnectRequest,
+                command: AuthCommand::Connect,
                 reason: reason.into(),
             });
         }
@@ -288,14 +288,14 @@ async fn handle_connect_proof(
         ),
         Err(status) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthLogonProof,
+                command: AuthCommand::Proof,
                 reason: status.into(),
             });
         }
     };
 
     stream
-        .write(&wow_bincode().serialize(&(AuthCommand::AuthLogonProof, response))?)
+        .write(&wow_bincode().serialize(&(AuthCommand::Proof, response))?)
         .await?;
 
     Ok(state)
@@ -309,7 +309,7 @@ async fn handle_reconnect_request(
 ) -> Result<RequestState> {
     if request.build != 12340 {
         return Ok(RequestState::Rejected {
-            command: AuthCommand::AuthReconnectChallenge,
+            command: AuthCommand::ReConnect,
             reason: ReturnCode::VersionInvalid,
         });
     }
@@ -323,7 +323,7 @@ async fn handle_reconnect_request(
             Err(e) => {
                 debug!("user connected with invalid username: {}", e);
                 return Ok(RequestState::Rejected {
-                    command: AuthCommand::AuthReconnectChallenge,
+                    command: AuthCommand::ReConnect,
                     reason: ReturnCode::Failed,
                 });
             }
@@ -334,7 +334,7 @@ async fn handle_reconnect_request(
         Ok(token) => token,
         Err(e) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthReconnectChallenge,
+                command: AuthCommand::ReConnect,
                 reason: e.into(),
             })
         }
@@ -342,7 +342,7 @@ async fn handle_reconnect_request(
 
     stream
         .write(&bincode::options().serialize(&(
-            AuthCommand::AuthReconnectChallenge,
+            AuthCommand::ReConnect,
             ReturnCode::Success,
             token.reconnect_proof,
             VERSION_CHALLENGE,
@@ -365,11 +365,11 @@ async fn handle_reconnect_proof(
     {
         Ok(_) => (
             RequestState::Realmlist,
-            (AuthCommand::AuthReconnectProof, ReturnCode::Success, 0u16),
+            (AuthCommand::ReProof, ReturnCode::Success, 0u16),
         ),
         Err(status) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthReconnectChallenge,
+                command: AuthCommand::ReConnect,
                 reason: status.into(),
             });
         }

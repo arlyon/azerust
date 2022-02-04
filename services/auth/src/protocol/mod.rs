@@ -18,14 +18,14 @@ pub mod packets;
 #[derive(Debug, Display)]
 pub enum Message {
     #[display(fmt = "ConnectRequest")]
-    ConnectRequest(ConnectRequest) = 0x00,
+    Connect(ConnectRequest) = 0x00,
     #[display(fmt = "AuthLogonProof")]
-    ConnectProof(ConnectProof) = 0x01,
+    Proof(ConnectProof) = 0x01,
 
     #[display(fmt = "ReconnectRequest")]
-    ReconnectRequest(ConnectRequest) = 0x02,
+    ReConnect(ConnectRequest) = 0x02,
     #[display(fmt = "ReconnectProof")]
-    ReconnectProof(ReconnectProof) = 0x03,
+    ReProof(ReconnectProof) = 0x03,
 
     #[display(fmt = "RealmList")]
     RealmList(RealmListRequest) = 0x10,
@@ -34,31 +34,19 @@ pub enum Message {
 impl TryFrom<&[u8]> for Message {
     type Error = MessageParseError;
 
-    /// Note: bincode is little-endian by default and as such cross platform.
-    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-        let (command, data) = (data[0], &data[1..]);
-        AuthCommand::try_from(command)
-            .map_err(|_| MessageParseError::InvalidCommand(command))
-            .and_then(|c| match c {
-                AuthCommand::ConnectRequest => wow_bincode()
-                    .deserialize(data)
-                    .map(Message::ConnectRequest)
-                    .map_err(Into::into),
-                AuthCommand::AuthLogonProof => wow_bincode()
-                    .deserialize(data)
-                    .map(Message::ConnectProof)
-                    .map_err(Into::into),
-                AuthCommand::AuthReconnectChallenge => wow_bincode()
-                    .deserialize(data)
-                    .map(Message::ReconnectRequest)
-                    .map_err(Into::into),
-                AuthCommand::AuthReconnectProof => wow_bincode()
-                    .deserialize(data)
-                    .map(Message::ReconnectProof)
-                    .map_err(Into::into),
-                AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
-                _ => Err(MessageParseError::InvalidCommand(command)),
-            })
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let (command, bytes) = (bytes[0], &bytes[1..]);
+        let command = AuthCommand::try_from(command)
+            .map_err(|_| MessageParseError::InvalidCommand(command))?;
+
+        match command {
+            AuthCommand::Connect => wow_bincode().deserialize(bytes).map(Message::Connect),
+            AuthCommand::Proof => wow_bincode().deserialize(bytes).map(Message::Proof),
+            AuthCommand::ReConnect => wow_bincode().deserialize(bytes).map(Message::ReConnect),
+            AuthCommand::ReProof => wow_bincode().deserialize(bytes).map(Message::ReProof),
+            AuthCommand::RealmList => Ok(Message::RealmList(Default::default())),
+        }
+        .map_err(Into::into)
     }
 }
 
@@ -72,24 +60,23 @@ pub enum MessageParseError {
 pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     stream: &mut R,
 ) -> Result<Message, PacketHandleError> {
-    let mut buffer = [0u8; 128];
-    stream.read(&mut buffer[..1]).await?;
+    let mut bytes = [0u8; 128];
+    stream.read(&mut bytes[..1]).await?;
 
-    let command = AuthCommand::try_from(buffer[0])?;
+    let command = AuthCommand::try_from(bytes[0])?;
     let command_len = match command {
-        AuthCommand::ConnectRequest => std::mem::size_of::<ConnectRequest>(),
-        AuthCommand::AuthLogonProof => std::mem::size_of::<ConnectProof>(),
-        AuthCommand::AuthReconnectChallenge => std::mem::size_of::<ConnectRequest>(),
-        AuthCommand::AuthReconnectProof => std::mem::size_of::<ReconnectProof>(),
+        AuthCommand::Connect => std::mem::size_of::<ConnectRequest>(),
+        AuthCommand::Proof => std::mem::size_of::<ConnectProof>(),
+        AuthCommand::ReConnect => std::mem::size_of::<ConnectRequest>(),
+        AuthCommand::ReProof => std::mem::size_of::<ReconnectProof>(),
         AuthCommand::RealmList => std::mem::size_of::<RealmListRequest>(),
-        c => return Err(PacketHandleError::UnsupportedCommand(c)),
     };
 
-    let buffer = &mut buffer[..command_len];
-    let read_len = stream.read(buffer).await?;
+    let bytes = &mut bytes[..command_len];
+    let read_len = stream.read(bytes).await?;
     trace!(
         "read {:02X?} ({} bytes) for command {:?} ({} bytes)",
-        &buffer[..read_len],
+        &bytes[..read_len],
         read_len,
         command,
         command_len
@@ -100,20 +87,13 @@ pub async fn read_packet<R: async_std::io::Read + std::fmt::Debug + Unpin>(
     }
 
     match command {
-        AuthCommand::ConnectRequest => wow_bincode()
-            .deserialize(buffer)
-            .map(Message::ConnectRequest),
-        AuthCommand::AuthLogonProof => wow_bincode().deserialize(buffer).map(Message::ConnectProof),
-        AuthCommand::AuthReconnectChallenge => wow_bincode()
-            .deserialize(buffer)
-            .map(Message::ReconnectRequest),
-        AuthCommand::AuthReconnectProof => wow_bincode()
-            .deserialize(buffer)
-            .map(Message::ReconnectProof),
-        AuthCommand::RealmList => wow_bincode().deserialize(buffer).map(Message::RealmList),
-        _ => return Err(PacketHandleError::UnsupportedCommand(command)),
+        AuthCommand::Connect => wow_bincode().deserialize(bytes).map(Message::Connect),
+        AuthCommand::Proof => wow_bincode().deserialize(bytes).map(Message::Proof),
+        AuthCommand::ReConnect => wow_bincode().deserialize(bytes).map(Message::ReConnect),
+        AuthCommand::ReProof => wow_bincode().deserialize(bytes).map(Message::ReProof),
+        AuthCommand::RealmList => wow_bincode().deserialize(bytes).map(Message::RealmList),
     }
-    .map_err(|e| PacketHandleError::MessageParse(MessageParseError::DecodeError(e)))
+    .map_err(|e| MessageParseError::DecodeError(e).into())
 }
 
 #[derive(Error, Debug)]
@@ -126,9 +106,6 @@ pub enum PacketHandleError {
 
     #[error("error while reading packet: {0}")]
     IoRead(#[from] async_std::io::Error),
-
-    #[error("command is not currently supported: {0:?}")]
-    UnsupportedCommand(AuthCommand),
 
     #[error("command is invalid: {0}")]
     InvalidCommand(#[from] TryFromPrimitiveError<AuthCommand>),

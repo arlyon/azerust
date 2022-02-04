@@ -67,8 +67,8 @@ impl RealmList for MySQLRealmList {
         start: SystemTime,
         population: u32,
     ) -> Result<(), RealmListError> {
-        let start_u32: u32 = UNIX_EPOCH
-            .duration_since(start)
+        let start_u32: u32 = start
+            .duration_since(UNIX_EPOCH)
             .expect("no time can be smaller than UNIX_EPOCH")
             .as_secs()
             .try_into()
