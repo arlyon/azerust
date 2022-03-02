@@ -24,7 +24,6 @@ use sha1::Digest;
 use tokio::{
     io::AsyncWriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
-    stream,
     sync::RwLock,
     time::interval,
     try_join,
@@ -126,7 +125,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                 self.realm_seed,
                 challenge,
             );
-            stream.write(&wow_bincode().serialize(&packet)?).await?;
+            stream.write_all(&wow_bincode().serialize(&packet)?).await?;
 
             if let Err(e) = self.connect_loop(Arc::new(RwLock::new(stream)), id).await {
                 error!("error handling request: {}", e);
@@ -196,7 +195,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                                 stream
                                     .write()
                                     .await
-                                    .write(&wow_bincode().serialize(&(
+                                    .write_all(&wow_bincode().serialize(&(
                                         6u16.swap_bytes(),
                                         OpCode::SmsgAuthResponse,
                                         c,

@@ -1,8 +1,8 @@
-use std::{io, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
-    EmptyMutation, EmptySubscription, Schema,
+    EmptySubscription, Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
@@ -44,7 +44,8 @@ pub async fn api<
 
     Server::bind(listen_addr)
         .serve(app.into_make_service())
-        .await;
+        .await
+        .map_err(|_| ())?;
 
     Ok(())
 }

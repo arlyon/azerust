@@ -14,14 +14,14 @@
 
 use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use azerust_game::realms::RealmId;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use azerust_mysql_characters::MySQLCharacterService;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
-use tokio::try_join;
+use tokio::{task::JoinHandle, try_join};
 use tracing::debug;
 
 use crate::{conf::WorldServerConfig, opt::Opt, worldserver::WorldServer};
@@ -69,6 +69,14 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err),
+        Err(err) => Err(anyhow!("join failed: {}", err)),
+    }
+}
+
 async fn start_server(config: &WorldServerConfig) -> Result<()> {
     let auth_pool = MySqlPool::connect(&config.auth_database)
         .await
@@ -99,32 +107,32 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
     let e = server.clone();
 
     try_join!(
-        tokio::task::Builder::new()
-            .name("world::heartbeat::server")
-            .spawn(async move {
-                a.auth_server_heartbeat().await;
-            }),
-        tokio::task::Builder::new()
-            .name("world::clients")
-            .spawn(async move {
-                b.accept_clients().await;
-            }),
-        tokio::task::Builder::new()
-            .name("world::update")
-            .spawn(async move {
-                c.update().await;
-            }),
-        tokio::task::Builder::new()
-            .name("world::packets")
-            .spawn(async move {
-                d.world.handle_packets().await;
-            }),
-        tokio::task::Builder::new()
-            .name("world::timers")
-            .spawn(async move {
-                e.world.timers().await;
-            })
-    );
+        flatten(
+            tokio::task::Builder::new()
+                .name("world::heartbeat::server")
+                .spawn(async move { a.auth_server_heartbeat().await })
+        ),
+        flatten(
+            tokio::task::Builder::new()
+                .name("world::clients")
+                .spawn(async move { b.accept_clients().await })
+        ),
+        flatten(
+            tokio::task::Builder::new()
+                .name("world::update")
+                .spawn(async move { c.update().await })
+        ),
+        flatten(
+            tokio::task::Builder::new()
+                .name("world::packets")
+                .spawn(async move { d.world.handle_packets().await })
+        ),
+        flatten(
+            tokio::task::Builder::new()
+                .name("world::timers")
+                .spawn(async move { e.world.timers().await })
+        )
+    )?;
 
     Ok(())
 }

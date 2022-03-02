@@ -84,7 +84,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn handle_packets(&self) -> Result<()> {
         let mut receiver = self.receiver.lock().await;
         loop {
-            let (id, packet) = receiver.recv().await.ok_or(anyhow!("no packet"))?;
+            let (id, packet) = receiver.recv().await.ok_or_else(|| anyhow!("no packet"))?;
             let session = {
                 let sessions = self.sessions.read().await;
                 match sessions.get(&id).cloned() {
@@ -97,7 +97,6 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 error!("could not handle packet from client {:?}", id);
             }
         }
-        Ok(())
     }
 
     pub async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
@@ -124,7 +123,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                     .await
             }
             ClientPacket::CharEnum => {
-                let id = session.client.read().await.account.unwrap();
+                let id = session
+                    .client
+                    .read()
+                    .await
+                    .account
+                    .ok_or_else(|| anyhow!("no account"))?;
                 let characters = self
                     .characters
                     .get_by_account(id)
@@ -182,7 +186,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
 
                 self.characters
                     .create_character(
-                        session.client.read().await.account.unwrap(),
+                        session
+                            .client
+                            .read()
+                            .await
+                            .account
+                            .ok_or_else(|| anyhow!("no account"))?,
                         CharacterCreate {
                             name,
                             race,

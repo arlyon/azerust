@@ -8,11 +8,7 @@ use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    net::TcpStream,
-    sync::RwLock,
-};
+use tokio::{io::AsyncReadExt, net::TcpStream, sync::RwLock};
 use tracing::trace;
 
 use crate::{world::Session, wow_bincode::wow_bincode};

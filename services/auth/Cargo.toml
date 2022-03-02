@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-tokio = { version = "1", features = ["macros"] }
+tokio = { version = "1", features = ["macros", "tracing"] }
 async-trait = "0.1"
 sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "mysql", "offline"] }
 

@@ -61,7 +61,7 @@ pub async fn read_packet<R: AsyncRead + std::fmt::Debug + Unpin>(
     stream: &mut R,
 ) -> Result<Message, PacketHandleError> {
     let mut bytes = [0u8; 128];
-    stream.read(&mut bytes[..1]).await?;
+    stream.read_exact(&mut bytes[..1]).await?;
 
     let command = AuthCommand::try_from(bytes[0])?;
     let command_len = match command {

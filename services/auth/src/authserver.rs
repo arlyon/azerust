@@ -6,7 +6,7 @@ use std::{
     time::{self, Instant},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
@@ -19,10 +19,8 @@ use futures_util::StreamExt;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    stream::{self},
     sync::RwLock,
     time::interval,
-    try_join,
 };
 use tokio_stream::{
     iter,
@@ -191,7 +189,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 let mut buffer = [0u8; 2];
                 wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
                 info!("rejecting {:?} due to {:?}", command, reason);
-                stream.write(&buffer).await?;
+                stream.write_all(&buffer).await?;
                 break;
             }
         }
@@ -216,7 +214,7 @@ async fn handle_connect_request(
     let mut buffer = [0u8; 16];
     let username = {
         let username = &mut buffer[..request.identifier_length as usize];
-        stream.read(username).await?;
+        stream.read_exact(username).await?;
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
@@ -258,7 +256,7 @@ async fn handle_connect_request(
         len,
         packet
     );
-    stream.write(&buffer[..len]).await?;
+    stream.write_all(&buffer[..len]).await?;
 
     Ok(state)
 }
@@ -293,7 +291,7 @@ async fn handle_connect_proof(
     };
 
     stream
-        .write(&wow_bincode().serialize(&(AuthCommand::Proof, response))?)
+        .write_all(&wow_bincode().serialize(&(AuthCommand::Proof, response))?)
         .await?;
 
     Ok(state)
@@ -315,7 +313,7 @@ async fn handle_reconnect_request(
     let mut buffer = [0u8; 16];
     let username = {
         let username = &mut buffer[..request.identifier_length as usize];
-        stream.read(username).await?;
+        stream.read_exact(username).await?;
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
@@ -339,7 +337,7 @@ async fn handle_reconnect_request(
     };
 
     stream
-        .write(&bincode::options().serialize(&(
+        .write_all(&bincode::options().serialize(&(
             AuthCommand::ReConnect,
             ReturnCode::Success,
             token.reconnect_proof,
@@ -374,7 +372,7 @@ async fn handle_reconnect_proof(
     };
 
     debug!("user has reauthenticated");
-    stream.write(&bincode::serialize(&response)?).await?;
+    stream.write_all(&bincode::serialize(&response)?).await?;
     Ok(state)
 }
 
@@ -395,6 +393,6 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
     }
     packet.extend_from_slice(&[0x10, 0x0]);
 
-    stream.write(&packet).await?;
+    stream.write_all(&packet).await?;
     Ok(RequestState::Realmlist)
 }

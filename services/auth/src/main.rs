@@ -27,8 +27,7 @@ use conf::AuthServerConfig;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
-use tokio::try_join;
-use tracing::debug;
+use tokio::{task::JoinHandle, try_join};
 
 use crate::{
     authserver::AuthServer,
@@ -87,6 +86,14 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err),
+        Err(err) => Err(anyhow!("join failed: {}", err)),
+    }
+}
+
 async fn start_server(
     AuthServerConfig {
         bind_address,
@@ -108,29 +115,27 @@ async fn start_server(
 
     let a = tokio::task::Builder::new()
         .name("auth::server")
-        .spawn(async move {
-            a.authentication(bind_address.clone(), port.clone()).await;
-        });
+        .spawn(async move { a.authentication(bind_address, port).await });
     let b = tokio::task::Builder::new()
         .name("auth::heartbeat::world")
-        .spawn(async move {
-            b.world_server_heartbeat(bind_address.clone()).await;
-        });
+        .spawn(async move { b.world_server_heartbeat(bind_address).await });
     let c = tokio::task::Builder::new()
         .name("auth::realmlist")
-        .spawn(async move {
-            c.realmlist_updater().await;
-        });
+        .spawn(async move { c.realmlist_updater().await });
 
     if let Some(api_port) = api_port {
         let addr = SocketAddr::new(bind_address.into(), api_port);
         let api = tokio::task::Builder::new()
             .name("auth::graphql")
-            .spawn(async move { api(&addr, accounts.clone(), realms.clone()).await });
+            .spawn(async move {
+                api(&addr, accounts.clone(), realms.clone())
+                    .await
+                    .map_err(|_| anyhow!("failed to start graphql api"))
+            });
 
-        try_join!(a, b, c, api);
+        try_join!(flatten(a), flatten(b), flatten(c), flatten(api))?;
     } else {
-        try_join!(a, b, c);
+        try_join!(flatten(a), flatten(b), flatten(c))?;
     }
 
     Ok(())
