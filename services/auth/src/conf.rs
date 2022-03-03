@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct AuthServerConfig {
     pub bind_address: Ipv4Addr,
     pub port: u16,
+    pub heartbeat_port: u16,
     pub api_port: Option<u16>,
     pub console_port: Option<u16>,
 

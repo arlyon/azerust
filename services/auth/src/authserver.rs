@@ -26,7 +26,7 @@ use tokio_stream::{
     iter,
     wrappers::{IntervalStream, TcpListenerStream},
 };
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     protocol::{
@@ -87,14 +87,13 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
     }
 
     #[instrument(skip(self, host))]
-    pub async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
-        // todo(arlyon): change the world server listen port
-        let socket = tokio::net::UdpSocket::bind((host, 1234)).await?;
+    pub async fn world_server_heartbeat(&self, host: Ipv4Addr, port: u16) -> Result<()> {
+        let socket = tokio::net::UdpSocket::bind((host, port)).await?;
 
         let mut buffer = [0u8; 6];
         loop {
             if socket.recv(&mut buffer).await.is_err() {
-                debug!("received larger packet than expected");
+                warn!("received larger packet than expected");
                 continue;
             };
             match wow_bincode().deserialize(&buffer) {

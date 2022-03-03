@@ -8,18 +8,18 @@ use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
-use tokio::{io::AsyncReadExt, net::TcpStream, sync::RwLock};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::trace;
 
 use crate::{world::Session, wow_bincode::wow_bincode};
 
 /// Reads one or more packets from a frame in the stream
-pub async fn read_packets(
-    stream: Arc<RwLock<TcpStream>>,
-    session: &Option<Arc<Session>>,
+pub async fn read_packets<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    session: Option<&Arc<Session>>,
 ) -> Result<Vec<ClientPacket>> {
     let mut buffer = [0u8; 2048];
-    let read_len = stream.write().await.read(&mut buffer).await?;
+    let read_len = reader.read(&mut buffer).await?;
 
     if read_len == 0 {
         bail!("connection closed");
@@ -189,6 +189,16 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
         OpCode::CmsgCharDelete => Ok(ClientPacket::CharacterDelete(
             wow_bincode().deserialize(bytes)?,
         )),
+        OpCode::CmsgSetActiveVoiceChannel => todo!(),
+        OpCode::CmsgNameQuery => todo!(),
+        OpCode::CmsgPlayedTime => todo!(),
+        OpCode::CmsgQueryTime => todo!(),
+        OpCode::CmsgZoneupdate => todo!(),
+        OpCode::CmsgRequestAccountData => todo!(),
+        OpCode::CmsgUpdateAccountData => todo!(),
+        OpCode::CmsgSetActionbarToggles => todo!(),
+        OpCode::CmsgWorldStateUiTimerUpdate => todo!(),
+
         c => bail!("unsupported opcode: {:?}", c),
     }
 }

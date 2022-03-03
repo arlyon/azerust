@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    marker::PhantomData,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -12,15 +13,16 @@ use azerust_game::{
 };
 use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
 use tokio::{
+    io::AsyncWrite,
     join,
-    net::TcpStream,
+    net::{tcp::OwnedWriteHalf, TcpStream},
     sync::{
         mpsc::{unbounded_channel, UnboundedReceiver as Receiver, UnboundedSender as Sender},
         Mutex, RwLock,
     },
     time::{interval, Interval},
 };
-use tracing::error;
+use tracing::{error, trace};
 
 use super::Session;
 use crate::client::{Client, ClientId};
@@ -84,7 +86,9 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn handle_packets(&self) -> Result<()> {
         let mut receiver = self.receiver.lock().await;
         loop {
+            trace!("waiting for packet");
             let (id, packet) = receiver.recv().await.ok_or_else(|| anyhow!("no packet"))?;
+            trace!("getting session");
             let session = {
                 let sessions = self.sessions.read().await;
                 match sessions.get(&id).cloned() {
@@ -93,9 +97,11 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 }
             };
 
+            trace!("handling packet");
             if self.handle_packet(session, packet).await.is_err() {
                 error!("could not handle packet from client {:?}", id);
             }
+            trace!("handled!");
         }
     }
 
@@ -259,12 +265,16 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn create_session(
         &self,
         client: Arc<RwLock<Client>>,
-        stream: Arc<RwLock<TcpStream>>,
+        writer: OwnedWriteHalf,
         session_key: [u8; 40],
         addons: Vec<Addon>,
-    ) -> Result<Arc<Session>> {
-        let session =
-            Arc::new(Session::new(client, stream, session_key, self.sender.clone(), addons).await?);
+    ) -> Result<Arc<Session>, (anyhow::Error, OwnedWriteHalf)> {
+        let session = Arc::new(
+            match Session::new(client, writer, session_key, self.sender.clone(), addons).await {
+                Ok(s) => s,
+                Err((e, w)) => return Err((e, w)),
+            },
+        );
         self.sessions
             .write()
             .await

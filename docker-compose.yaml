@@ -4,6 +4,7 @@ x-log-level: &log-level
 services:
   world:
     image: ghcr.io/arlyon/azerust-world:master
+    profiles: ["server"]
     build:
       context: .
     depends_on: [database]
@@ -14,6 +15,7 @@ services:
       - "8085:8085"
   auth:
     image: ghcr.io/arlyon/azerust-auth:master
+    profiles: ["server"]
     build:
       context: .
     depends_on: [database]

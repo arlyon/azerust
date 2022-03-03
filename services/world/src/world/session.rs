@@ -17,7 +17,7 @@ use azerust_protocol::{
 use bincode::Options;
 use tokio::{
     io::AsyncWriteExt,
-    net::TcpStream,
+    net::{tcp::OwnedWriteHalf, TcpStream},
     sync::{mpsc::UnboundedSender as Sender, Mutex, RwLock},
 };
 use tracing::trace;
@@ -33,7 +33,7 @@ pub struct Session {
     /// keep the client id so we don't have to open the lock
     pub client_id: ClientId,
     pub client: Arc<RwLock<Client>>,
-    stream: Arc<RwLock<TcpStream>>,
+    stream: Mutex<OwnedWriteHalf>,
     encryption: Mutex<HeaderCrypto>,
     sender: Sender<(ClientId, ClientPacket)>,
     latency: AtomicU32,
@@ -46,16 +46,16 @@ pub struct Session {
 impl Session {
     pub async fn new(
         client: Arc<RwLock<Client>>,
-        stream: Arc<RwLock<TcpStream>>,
+        stream: OwnedWriteHalf,
         session_key: [u8; 40],
         sender: Sender<(ClientId, ClientPacket)>,
         addons: Vec<Addon>,
-    ) -> Result<Self> {
+    ) -> Result<Self, (anyhow::Error, OwnedWriteHalf)> {
         let client_id = client.read().await.id;
         let x = Self {
             client,
             client_id,
-            stream,
+            stream: Mutex::new(stream),
             encryption: Mutex::new(HeaderCrypto::new(session_key)),
             sender,
             addons,
@@ -63,8 +63,10 @@ impl Session {
             timeout: Mutex::new(Instant::now()),
             character: Arc::new(RwLock::new(None)),
         };
-        x.finalize().await?;
-        Ok(x)
+        match x.finalize().await {
+            Ok(_) => Ok(x),
+            Err(e) => Err((e, x.stream.into_inner())),
+        }
     }
 
     pub async fn login(&self, character: Character) -> Result<()> {
@@ -223,6 +225,7 @@ impl Session {
                     .await?;
             }
         };
+        trace!("packet sent!");
 
         Ok(())
     }
@@ -247,11 +250,17 @@ impl Session {
             &((bytes.len() as u16 + 2).swap_bytes(), opcode),
         )?;
 
+        trace!("writing headers!");
         self.encrypt_headers(&mut headers).await;
+        trace!("done!");
         let mut packet = headers.to_vec();
         packet.extend_from_slice(bytes);
 
-        Ok(self.stream.write().await.write(&packet).await?)
+        trace!("writing!");
+        let out = self.stream.lock().await.write(&packet).await?;
+
+        trace!("done");
+        Ok(out)
     }
 
     pub async fn encrypt_headers(&self, header: &mut [u8; 4]) {

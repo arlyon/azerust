@@ -10,7 +10,7 @@ use azerust_game::{
 };
 use chrono::Utc;
 use sqlx::MySqlPool;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
 #[derive(Debug, Clone)]
@@ -198,17 +198,21 @@ impl AccountService for MySQLAccountService {
     ) -> Result<[u8; 20], LoginFailure> {
         let (server_proof, session_key) = token.accept(public_key, client_proof)?;
 
+        let username = "ARLYON";
+
         // update session information
         // todo(arlyon) set this information
         sqlx::query!(
             "UPDATE account SET session_key_auth = ?, last_ip = ?, last_login = NOW(), locale = ?, failed_logins = 0, os = ? WHERE username = ?", 
-            &session_key[..], "0.0.0.0", u8::from(Locale::enUS), "Win", "ARLYON"
+            &session_key[..], "0.0.0.0", u8::from(Locale::enUS), "Win", username
         )
         .execute(&self.pool)
         .await.map_err(|e| {
             error!("error updating session: {}", e);
             LoginFailure::DatabaseError
         })?;
+
+        info!("logged in {}", username);
 
         Ok(server_proof)
     }

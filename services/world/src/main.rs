@@ -100,38 +100,27 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
         config.auth_server_address.clone(),
     ));
 
-    let a = server.clone();
-    let b = server.clone();
-    let c = server.clone();
-    let d = server.clone();
-    let e = server.clone();
-
     try_join!(
-        flatten(
-            tokio::task::Builder::new()
-                .name("world::heartbeat::server")
-                .spawn(async move { a.auth_server_heartbeat().await })
-        ),
-        flatten(
-            tokio::task::Builder::new()
-                .name("world::clients")
-                .spawn(async move { b.accept_clients().await })
-        ),
-        flatten(
-            tokio::task::Builder::new()
-                .name("world::update")
-                .spawn(async move { c.update().await })
-        ),
-        flatten(
-            tokio::task::Builder::new()
-                .name("world::packets")
-                .spawn(async move { d.world.handle_packets().await })
-        ),
-        flatten(
-            tokio::task::Builder::new()
-                .name("world::timers")
-                .spawn(async move { e.world.timers().await })
-        )
+        flatten(tokio::task::Builder::new().name("world::heartbeat").spawn({
+            let cloned = server.clone();
+            async move { cloned.auth_server_heartbeat().await }
+        })),
+        flatten(tokio::task::Builder::new().name("world::clients").spawn({
+            let cloned = server.clone();
+            async move { cloned.accept_clients().await }
+        })),
+        flatten(tokio::task::Builder::new().name("world::update").spawn({
+            let cloned = server.clone();
+            async move { cloned.update().await }
+        })),
+        flatten(tokio::task::Builder::new().name("world::packets").spawn({
+            let cloned = server.clone();
+            async move { cloned.world.handle_packets().await }
+        })),
+        flatten(tokio::task::Builder::new().name("world::timers").spawn({
+            let cloned = server.clone();
+            async move { cloned.world.timers().await }
+        }))
     )?;
 
     Ok(())

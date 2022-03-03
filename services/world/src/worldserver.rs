@@ -22,8 +22,8 @@ use bincode::Options;
 use rand::Rng;
 use sha1::Digest;
 use tokio::{
-    io::AsyncWriteExt,
-    net::{TcpListener, TcpStream, UdpSocket},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    net::{tcp::OwnedWriteHalf, TcpListener, UdpSocket},
     sync::RwLock,
     time::interval,
     try_join,
@@ -107,7 +107,8 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
         info!("listening on {:?}", &addr);
 
         let mut connections = TcpListenerStream::new(listener).filter_map(|s| s.ok());
-        while let Some(mut stream) = connections.next().await {
+        while let Some(stream) = connections.next().await {
+            let (reader, mut writer) = stream.into_split();
             let (id, challenge): (ClientId, [u8; 32]) = {
                 let mut rng = rand::thread_rng();
                 rng.gen()
@@ -125,9 +126,9 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
                 self.realm_seed,
                 challenge,
             );
-            stream.write_all(&wow_bincode().serialize(&packet)?).await?;
+            writer.write_all(&wow_bincode().serialize(&packet)?).await?;
 
-            if let Err(e) = self.connect_loop(Arc::new(RwLock::new(stream)), id).await {
+            if let Err(e) = self.connect_loop(reader, writer, id).await {
                 error!("error handling request: {}", e);
             }
 
@@ -161,94 +162,98 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
 
     /// handles authentication, WorldSession creation,
     /// and pipes packets into the World
-    #[instrument(skip(self, stream))]
-    async fn connect_loop(
+    #[instrument(skip(self, reader, writer))]
+    async fn connect_loop<Read>(
         &self,
-        stream: Arc<RwLock<TcpStream>>,
+        mut reader: Read,
+        writer: OwnedWriteHalf,
         client_id: ClientId,
-    ) -> Result<()> {
-        let mut session = None;
+    ) -> Result<()>
+    where
+        Read: AsyncRead + Unpin,
+    {
         debug!("accepting packets from {:?}", client_id);
+        let mut packets = read_packets(&mut reader, None).await?;
 
-        loop {
-            let packets = read_packets(stream.clone(), &session).await?;
-            for packet in packets {
-                trace!("received message {:?}", packet);
-                match (&session, packet) {
-                    (_, ClientPacket::AuthSession(auth_session)) => {
-                        let client = self.clients.read().await.get(&client_id).cloned();
-                        match handle_auth_session(
-                            stream.clone(),
-                            &self.world,
-                            client.ok_or_else(|| anyhow!("no client with this id"))?,
-                            auth_session,
-                            self.id,
-                            &self.realm_seed,
-                            &self.accounts,
-                        )
-                        .await
-                        {
-                            Ok(s) => {
-                                session = Some(s);
-                            }
-                            Err(c) => {
-                                stream
-                                    .write()
-                                    .await
-                                    .write_all(&wow_bincode().serialize(&(
-                                        6u16.swap_bytes(),
-                                        OpCode::SmsgAuthResponse,
-                                        c,
-                                    ))?)
-                                    .await?;
-                                bail!("client failed to authenticate")
-                            }
-                        }
+        let session = match packets.drain(..1).next() {
+            Some(ClientPacket::AuthSession(auth_session)) => {
+                let client = self.clients.read().await.get(&client_id).cloned();
+                match handle_auth_session(
+                    writer,
+                    &self.world,
+                    client.ok_or_else(|| anyhow!("no client with this id"))?,
+                    auth_session,
+                    self.id,
+                    &self.realm_seed,
+                    &self.accounts,
+                )
+                .await
+                {
+                    Ok(s) => s,
+                    Err((c, mut writer)) => {
+                        writer
+                            .write_all(&wow_bincode().serialize(&(
+                                6u16.swap_bytes(),
+                                OpCode::SmsgAuthResponse,
+                                c,
+                            ))?)
+                            .await?;
+                        bail!("client failed to authenticate")
                     }
-                    (Some(w), packet) => {
-                        try_join!(w.reset_timeout(), w.receive_packet(packet))?;
-                    }
-                    _ => bail!("unhandled state, disconnecting"),
                 }
             }
+            _ => bail!("client sent invalid packet"),
+        };
+
+        loop {
+            for packet in packets {
+                trace!("received message {:?}", packet);
+                try_join!(session.reset_timeout(), session.receive_packet(packet))?;
+            }
+
+            packets = read_packets(&mut reader, Some(&session)).await?;
         }
     }
 }
 
+/// Handles authentication, creating a WorldSession. In the event of
+/// error, returns ownership of the writer to the caller.
 async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterService>(
-    stream: Arc<RwLock<TcpStream>>,
+    writer: OwnedWriteHalf,
     world: &World<A, R, C>,
     client: Arc<RwLock<Client>>,
     auth_session: AuthSession,
     realm_id: RealmId,
     realm_seed: &[u8],
     accounts: &dyn AccountService,
-) -> std::result::Result<Arc<Session>, ResponseCode> {
+) -> std::result::Result<Arc<Session>, (ResponseCode, OwnedWriteHalf)> {
     if auth_session.realm_id != realm_id {
         debug!(
             "user {} tried to log in to realm {}, but this is realm {:?}",
             auth_session.username, auth_session.server_id, realm_id
         );
-        return Err(ResponseCode::RealmListRealmNotFound);
+        return Err((ResponseCode::RealmListRealmNotFound, writer));
     }
 
     if client.read().await.account.is_some() {
-        return Err(ResponseCode::AuthAlreadyOnline);
+        return Err((ResponseCode::AuthAlreadyOnline, writer));
     }
 
-    let account = accounts
-        .get_by_username(&auth_session.username)
-        .await
-        .map_err(|_| ResponseCode::AuthUnknownAccount)?;
+    let account = match accounts.get_by_username(&auth_session.username).await {
+        Ok(e) => e,
+        _ => return Err((ResponseCode::AuthUnknownAccount, writer)),
+    };
+
     trace!(
         "user {} connecting (build {})",
         auth_session.username,
         auth_session.build
     );
 
-    let session_key = account
-        .session_key
-        .ok_or(ResponseCode::AuthSessionExpired)?;
+    let session_key = match account.session_key {
+        Some(k) => k,
+        None => return Err((ResponseCode::AuthSessionExpired, writer)),
+    };
 
     // todo(arlyon): add account session_key to client
 
@@ -263,18 +268,21 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
     };
 
     if auth_session.client_proof != server_proof {
-        Err(ResponseCode::AuthReject)
-    } else {
-        trace!("user {} successfully authenticated", auth_session.username);
+        return Err((ResponseCode::AuthReject, writer));
+    }
 
-        client.write().await.account.replace(account.id);
+    trace!("user {} successfully authenticated", auth_session.username);
 
-        world
-            .create_session(client, stream, session_key, auth_session.addons)
-            .await
-            .map_err(|e| {
-                error!("could not create WorldSession: {}", e);
-                ResponseCode::AuthSystemError
-            })
+    client.write().await.account.replace(account.id);
+
+    match world
+        .create_session(client, writer, session_key, auth_session.addons)
+        .await
+    {
+        Ok(s) => Ok(s),
+        Err((e, writer)) => {
+            error!("could not create WorldSession: {}", e);
+            return Err((ResponseCode::AuthSystemError, writer));
+        }
     }
 }
