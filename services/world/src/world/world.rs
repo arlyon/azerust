@@ -65,7 +65,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
             loop {
                 timers.uptime.tick().await;
                 if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
-                    error!("error when setting uptime: {}", e);
+                    error!("error when setting uptime: {e}");
                 }
             }
         };
@@ -105,7 +105,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
         }
     }
 
-    pub async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
+    async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
         match packet {
             ClientPacket::AuthSession(_) => Ok(()), // ignore
             ClientPacket::KeepAlive => session.reset_timeout().await,

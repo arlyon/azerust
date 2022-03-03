@@ -110,7 +110,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> WorldServer<A, R, C> 
         let mut interval = interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
-            trace!("sending population heartbeat {}", population);
+            trace!("sending population heartbeat {population}");
             let mut buffer = [0u8; 6];
             wow_bincode().serialize_into(&mut buffer[..], &(0u8, self.id.0 as u8, population))?;
             if let Err(_e) = socket.send(&buffer).await {
@@ -150,7 +150,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> WorldServer<A, R, C> 
             writer.write_all(&wow_bincode().serialize(&packet)?).await?;
 
             if let Err(e) = self.connect_loop(reader, writer, id).await {
-                error!("error handling request: {}", e);
+                error!("error handling request: {e}");
             }
 
             self.clients.write().await.remove(&id);
@@ -288,8 +288,8 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
 ) -> std::result::Result<Arc<Session>, (ResponseCode, OwnedWriteHalf)> {
     if auth_session.realm_id != realm_id {
         debug!(
-            "user {} tried to log in to realm {}, but this is realm {:?}",
-            auth_session.username, auth_session.server_id, realm_id
+            "user {} tried to log in to realm {}, but this is realm {realm_id:?}",
+            auth_session.username, auth_session.server_id
         );
         return Err((ResponseCode::RealmListRealmNotFound, writer));
     }
@@ -340,7 +340,7 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
     {
         Ok(s) => Ok(s),
         Err((e, writer)) => {
-            error!("could not create WorldSession: {}", e);
+            error!("could not create WorldSession: {e}");
             return Err((ResponseCode::AuthSystemError, writer));
         }
     }

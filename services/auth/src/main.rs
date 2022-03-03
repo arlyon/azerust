@@ -65,8 +65,8 @@ async fn main() -> Result<()> {
                 let pool = MySqlPool::connect(&config.auth_database).await?;
                 let accounts = MySQLAccountService::new(pool);
                 match accounts.create_account(&username, &password, &email).await {
-                    Ok(id) => println!("created account {}", id),
-                    Err(e) => eprintln!("failed to create account: {}", e),
+                    Ok(id) => println!("created account {id}"),
+                    Err(e) => eprintln!("failed to create account: {e}"),
                 };
             }
         },
@@ -91,7 +91,7 @@ async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
         Ok(Err(err)) => Err(err),
-        Err(err) => Err(anyhow!("join failed: {}", err)),
+        Err(err) => Err(anyhow!("join failed: {err}")),
     }
 }
 

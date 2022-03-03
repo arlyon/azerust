@@ -102,11 +102,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                         .write()
                         .await
                         .insert(realm_id, Instant::now());
-                    trace!(
-                        "got heartbeat for {} with realm pop {}",
-                        realm_id,
-                        realm_pop
-                    )
+                    trace!("got heartbeat for {realm_id} with realm pop {realm_pop}")
                 }
                 Ok((_, _, 0u32)) | _ => debug!("received bad buffer: {:02X?}", &buffer),
             }
@@ -132,7 +128,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
             };
             trace!("updating realm populations: {:?}", data);
             if let Err(r) = self.realms.update_status(data).await {
-                error!("error while updating realm populations: {}", r);
+                error!("error while updating realm populations: {r}");
             }
         }
         Ok(())
@@ -148,7 +144,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         let mut connections = TcpListenerStream::new(listener);
         while let Some(Ok(mut stream)) = connections.next().await {
             if let Err(e) = self.connect_loop(&mut stream).await {
-                error!("error handling request: {}", e)
+                error!("error handling request: {e}")
             }
         }
 
@@ -161,7 +157,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
         loop {
             let message = read_packet(stream).await?;
-            debug!("received message {} in state {}", message, state);
+            debug!("received message {message} in state {state}");
             state = match (state, message) {
                 (_, Message::Connect(r)) => {
                     handle_connect_request(&r, &self.accounts, stream).await?
@@ -217,7 +213,7 @@ async fn handle_connect_request(
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
-                debug!("user connected with invalid username: {}", e);
+                debug!("user connected with invalid username: {e}");
                 return Ok(RequestState::Rejected {
                     command: AuthCommand::Connect,
                     reason: ReturnCode::Failed,
@@ -226,7 +222,7 @@ async fn handle_connect_request(
         }
     };
 
-    debug!("auth challenge for {}", username);
+    debug!("auth challenge for {username}");
 
     let (state, response) = match accounts.initiate_login(username).await {
         Ok(token) => (RequestState::ConnectChallenge { token }, token.into()),
@@ -249,12 +245,7 @@ async fn handle_connect_request(
         .with_varint_encoding()
         .serialize_into(&mut buffer[..len], &packet)?;
 
-    debug!(
-        "writing {:?} ({} bytes) for {:?}",
-        &buffer[..len],
-        len,
-        packet
-    );
+    debug!("writing {:?} ({len} bytes) for {packet:?}", &buffer[..len],);
     stream.write_all(&buffer[..len]).await?;
 
     Ok(state)
@@ -316,7 +307,7 @@ async fn handle_reconnect_request(
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
-                debug!("user connected with invalid username: {}", e);
+                debug!("user connected with invalid username: {e}");
                 return Ok(RequestState::Rejected {
                     command: AuthCommand::ReConnect,
                     reason: ReturnCode::Failed,

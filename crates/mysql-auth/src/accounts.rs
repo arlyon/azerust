@@ -133,7 +133,7 @@ impl AccountService for MySQLAccountService {
                 username,
                 ..
             }) => {
-                debug!("banned user {} attempted to log in", username);
+                debug!("banned user {username} attempted to log in");
                 return match status {
                     BanStatus::Temporary => Err(LoginFailure::Suspended),
                     BanStatus::Permanent => Err(LoginFailure::Banned),
@@ -208,11 +208,11 @@ impl AccountService for MySQLAccountService {
         )
         .execute(&self.pool)
         .await.map_err(|e| {
-            error!("error updating session: {}", e);
+            error!("error updating session: {e}");
             LoginFailure::DatabaseError
         })?;
 
-        info!("logged in {}", username);
+        info!("logged in {username}");
 
         Ok(server_proof)
     }

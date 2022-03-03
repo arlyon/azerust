@@ -75,11 +75,8 @@ pub async fn read_packet<R: AsyncRead + std::fmt::Debug + Unpin>(
     let bytes = &mut bytes[..command_len];
     let read_len = stream.read(bytes).await?;
     trace!(
-        "read {:02X?} ({} bytes) for command {:?} ({} bytes)",
+        "read {:02X?} ({read_len} bytes) for command {command:?} ({command_len} bytes)",
         &bytes[..read_len],
-        read_len,
-        command,
-        command_len
     );
 
     if read_len != command_len {
