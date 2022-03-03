@@ -63,21 +63,13 @@ async fn main() -> Result<()> {
             };
             auth.write(&opts.config).await?;
         }
-        None => start_server(&config).await?,
+        None => start_server(config).await?,
     };
 
     Ok(())
 }
 
-async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
-    match handle.await {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(err)) => Err(err),
-        Err(err) => Err(anyhow!("join failed: {}", err)),
-    }
-}
-
-async fn start_server(config: &WorldServerConfig) -> Result<()> {
+async fn start_server(config: WorldServerConfig) -> Result<()> {
     let auth_pool = MySqlPool::connect(&config.auth_database)
         .await
         .context("could not start the database pool")?;
@@ -92,36 +84,13 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
     let realms = MySQLRealmList::new(auth_pool.clone(), Duration::from_secs(60));
     let characters = MySQLCharacterService::new(character_pool.clone());
 
-    let server = Arc::new(WorldServer::new(
+    let server = WorldServer::new(
         config.realm_id,
         accounts,
         realms,
         characters,
-        config.auth_server_address.clone(),
-    ));
+        config.auth_server_address,
+    );
 
-    try_join!(
-        flatten(tokio::task::Builder::new().name("world::heartbeat").spawn({
-            let cloned = server.clone();
-            async move { cloned.auth_server_heartbeat().await }
-        })),
-        flatten(tokio::task::Builder::new().name("world::clients").spawn({
-            let cloned = server.clone();
-            async move { cloned.accept_clients().await }
-        })),
-        flatten(tokio::task::Builder::new().name("world::update").spawn({
-            let cloned = server.clone();
-            async move { cloned.update().await }
-        })),
-        flatten(tokio::task::Builder::new().name("world::packets").spawn({
-            let cloned = server.clone();
-            async move { cloned.world.handle_packets().await }
-        })),
-        flatten(tokio::task::Builder::new().name("world::timers").spawn({
-            let cloned = server.clone();
-            async move { cloned.world.timers().await }
-        }))
-    )?;
-
-    Ok(())
+    server.start().await
 }

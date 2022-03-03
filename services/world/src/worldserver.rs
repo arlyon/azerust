@@ -25,6 +25,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     net::{tcp::OwnedWriteHalf, TcpListener, UdpSocket},
     sync::RwLock,
+    task::JoinHandle,
     time::interval,
     try_join,
 };
@@ -65,8 +66,26 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
         characters: C,
         auth_server_address: String,
     ) -> Self {
+        WorldServer::with_world(
+            realm_id,
+            accounts.clone(),
+            realms.clone(),
+            World::new(realm_id, accounts, realms, characters),
+            auth_server_address,
+        )
+    }
+}
+
+impl<A: AccountService, R: RealmList, C: CharacterService> WorldServer<A, R, C> {
+    pub fn with_world(
+        realm_id: RealmId,
+        accounts: A,
+        realms: R,
+        world: World<A, R, C>,
+        auth_server_address: String,
+    ) -> Self {
         Self {
-            world: World::new(realm_id, accounts.clone(), realms.clone(), characters),
+            world,
             accounts,
             realms,
             auth_server_address,
@@ -80,6 +99,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
         }
     }
 
+    /// Sends periodic heartbeat packets to the auth server
     #[instrument(skip(self))]
     pub async fn auth_server_heartbeat(&self) -> Result<()> {
         let socket = UdpSocket::bind("127.0.0.1:0").await?;
@@ -99,6 +119,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
         }
     }
 
+    /// Allows the world server to accept new clients
     #[instrument(skip(self))]
     pub async fn accept_clients(&self) -> Result<()> {
         let addr = ("0.0.0.0", 8085);
@@ -138,6 +159,7 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
         Ok(())
     }
 
+    /// Runs the world update tick
     #[instrument(skip(self))]
     pub async fn update(&self) -> Result<()> {
         let mut interval =
@@ -216,6 +238,43 @@ impl<A: AccountService + Clone, R: RealmList + Clone, C: CharacterService> World
     }
 }
 
+impl<
+        A: 'static + AccountService + Send + Sync + Clone,
+        R: 'static + RealmList + Send + Sync + Clone,
+        C: 'static + CharacterService + Send + Sync,
+    > WorldServer<A, R, C>
+{
+    /// Start the world server, running the various tasks that it is comprised of
+    pub async fn start(self) -> Result<()> {
+        let server = Arc::new(self);
+
+        try_join!(
+            flatten(tokio::task::Builder::new().name("world::heartbeat").spawn({
+                let cloned = server.clone();
+                async move { cloned.auth_server_heartbeat().await }
+            })),
+            flatten(tokio::task::Builder::new().name("world::clients").spawn({
+                let cloned = server.clone();
+                async move { cloned.accept_clients().await }
+            })),
+            flatten(tokio::task::Builder::new().name("world::update").spawn({
+                let cloned = server.clone();
+                async move { cloned.update().await }
+            })),
+            flatten(tokio::task::Builder::new().name("world::packets").spawn({
+                let cloned = server.clone();
+                async move { cloned.world.handle_packets().await }
+            })),
+            flatten(tokio::task::Builder::new().name("world::timers").spawn({
+                let cloned = server.clone();
+                async move { cloned.world.timers().await }
+            }))
+        )?;
+
+        Ok(())
+    }
+}
+
 /// Handles authentication, creating a WorldSession. In the event of
 /// error, returns ownership of the writer to the caller.
 async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterService>(
@@ -284,5 +343,13 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
             error!("could not create WorldSession: {}", e);
             return Err((ResponseCode::AuthSystemError, writer));
         }
+    }
+}
+
+async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err),
+        Err(err) => Err(anyhow!("join failed: {err}")),
     }
 }
