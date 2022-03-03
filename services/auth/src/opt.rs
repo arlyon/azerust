@@ -1,4 +1,5 @@
-use async_std::path::PathBuf;
+use std::path::PathBuf;
+
 use structopt::StructOpt;
 
 /// An authentication server for Wrath of the Lich King.

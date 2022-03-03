@@ -18,7 +18,8 @@ mariadb in the docker-compose file. Our goals are:
 ## Getting Started
 
 This project uses [`cargo-make`](https://github.com/sagiegurari/cargo-make)
-for scripting / tasks.
+for scripting / tasks. It also uses the latest nightly compiler
+however this is only to speed up compilation.
 
 ### Configuration
 

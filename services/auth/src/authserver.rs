@@ -1,27 +1,35 @@
 use std::{
     collections::HashMap,
-    fmt,
+    fmt, iter,
     net::Ipv4Addr,
     str,
+    sync::Arc,
     time::{self, Instant},
 };
 
-use anyhow::{anyhow, Result};
-use async_std::{
-    net::{TcpListener, TcpStream},
-    prelude::*,
-    stream::{self, StreamExt},
-    sync::RwLock,
-};
+use anyhow::{anyhow, bail, Result};
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
 };
 use azerust_protocol::auth::{AuthCommand, ReturnCode};
+use azerust_utils::flatten;
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
-use tracing::{debug, error, info, instrument, trace};
+use futures_util::StreamExt;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+    sync::RwLock,
+    time::interval,
+    try_join,
+};
+use tokio_stream::{
+    iter,
+    wrappers::{IntervalStream, TcpListenerStream},
+};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     protocol::{
@@ -81,24 +89,14 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         }
     }
 
-    /// Start the server, handling requests on the provided host and port.
-    pub async fn start(&self, host: Ipv4Addr, port: u16) -> Result<()> {
-        self.authentication(host, port)
-            .try_join(self.world_server_heartbeat(host))
-            .try_join(self.realmlist_updater())
-            .await
-            .map(|_| ())
-    }
-
     #[instrument(skip(self, host))]
-    async fn world_server_heartbeat(&self, host: Ipv4Addr) -> Result<()> {
-        // todo(arlyon): change the world server listen port
-        let socket = async_std::net::UdpSocket::bind((host, 1234)).await?;
+    pub async fn world_server_heartbeat(&self, host: Ipv4Addr, port: u16) -> Result<()> {
+        let socket = tokio::net::UdpSocket::bind((host, port)).await?;
 
         let mut buffer = [0u8; 6];
         loop {
             if socket.recv(&mut buffer).await.is_err() {
-                debug!("received larger packet than expected");
+                warn!("received larger packet than expected");
                 continue;
             };
             match wow_bincode().deserialize(&buffer) {
@@ -107,11 +105,7 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                         .write()
                         .await
                         .insert(realm_id, Instant::now());
-                    trace!(
-                        "got heartbeat for {} with realm pop {}",
-                        realm_id,
-                        realm_pop
-                    )
+                    trace!("got heartbeat for {realm_id} with realm pop {realm_pop}")
                 }
                 Ok((_, _, 0u32)) | _ => debug!("received bad buffer: {:02X?}", &buffer),
             }
@@ -120,16 +114,16 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
     /// updates the realmlist based on recently received heartbeats
     #[instrument(skip(self))]
-    async fn realmlist_updater(&self) -> Result<()> {
-        let instant = stream::from_fn(|| Some(Instant::now()));
-        let mut interval = stream::interval(time::Duration::from_secs(5)).zip(instant);
+    pub async fn realmlist_updater(&self) -> Result<()> {
+        let instant = iter(iter::from_fn(|| Some(Instant::now())));
+        let mut interval = IntervalStream::new(interval(time::Duration::from_secs(5))).zip(instant);
         while let Some((_, now)) = interval.next().await {
             let data = {
                 let mut write = self.heartbeat.write().await;
                 let mut data = Vec::with_capacity(write.len());
                 data.extend(
                     write
-                        .drain_filter(|_, v| now.duration_since(*v).as_secs() > 15)
+                        .drain_filter(|_, v| now.saturating_duration_since(*v).as_secs() > 15)
                         .map(|(k, _)| (k, RealmFlags::Offline)),
                 );
                 data.extend(write.keys().map(|&k| (k, RealmFlags::Recommended)));
@@ -137,23 +131,23 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
             };
             trace!("updating realm populations: {:?}", data);
             if let Err(r) = self.realms.update_status(data).await {
-                error!("error while updating realm populations: {}", r);
+                error!("error while updating realm populations: {r}");
             }
         }
         Ok(())
     }
 
     #[instrument(skip(self, host, port))]
-    async fn authentication(&self, host: Ipv4Addr, port: u16) -> Result<()> {
+    pub async fn authentication(&self, host: Ipv4Addr, port: u16) -> Result<()> {
         let addr = (host, port);
         let listener = TcpListener::bind(&addr).await?;
 
         info!("listening on {:?}", &addr);
 
-        let mut connections = listener.incoming().filter_map(|s| s.ok());
-        while let Some(mut stream) = connections.next().await {
+        let mut connections = TcpListenerStream::new(listener);
+        while let Some(Ok(mut stream)) = connections.next().await {
             if let Err(e) = self.connect_loop(&mut stream).await {
-                error!("error handling request: {}", e)
+                error!("error handling request: {e}")
             }
         }
 
@@ -166,37 +160,64 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 
         loop {
             let message = read_packet(stream).await?;
-            debug!("received message {} in state {}", message, state);
+            debug!("received message {message} in state {state}");
             state = match (state, message) {
-                (_, Message::ConnectRequest(r)) => {
+                (_, Message::Connect(r)) => {
                     handle_connect_request(&r, &self.accounts, stream).await?
                 }
-                (_, Message::ReconnectRequest(r)) => {
+                (_, Message::ReConnect(r)) => {
                     handle_reconnect_request(&r, &self.accounts, stream).await?
                 }
-                (RequestState::ConnectChallenge { token }, Message::ConnectProof(proof)) => {
+                (RequestState::ConnectChallenge { token }, Message::Proof(proof)) => {
                     handle_connect_proof(&proof, &self.accounts, &token, stream).await?
                 }
-                (RequestState::ReconnectChallenge { token }, Message::ReconnectProof(proof)) => {
+                (RequestState::ReconnectChallenge { token }, Message::ReProof(proof)) => {
                     handle_reconnect_proof(&proof, &self.accounts, &token, stream).await?
                 }
                 (RequestState::Realmlist, Message::RealmList(_)) => {
                     handle_realmlist(&self.realms, stream).await?
                 }
-                (_, Message::ConnectProof(_) | Message::ReconnectProof(_)) => {
-                    return Err(anyhow!("received proof before request, closing connection"))
+                (_, Message::Proof(_) | Message::ReProof(_)) => {
+                    bail!("received proof before request")
                 }
-                _ => return Err(anyhow!("received message in bad state, closing connection")),
+                _ => bail!("received message in bad state"),
             };
 
             if let RequestState::Rejected { command, reason } = state {
                 let mut buffer = [0u8; 2];
                 wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
                 info!("rejecting {:?} due to {:?}", command, reason);
-                stream.write(&buffer).await?;
+                stream.write_all(&buffer).await?;
                 break;
             }
         }
+
+        Ok(())
+    }
+}
+
+impl<
+        T: 'static + AccountService + fmt::Debug + Send + Sync,
+        R: 'static + RealmList + Send + Sync,
+    > AuthServer<T, R>
+{
+    pub async fn start(self, host: Ipv4Addr, port: u16, heartbeat_port: u16) -> Result<()> {
+        let server = Arc::new(self);
+
+        let a = flatten(tokio::task::Builder::new().name("auth::server").spawn({
+            let server = server.clone();
+            async move { server.authentication(host, port).await }
+        }));
+        let b = flatten(tokio::task::Builder::new().name("auth::heartbeat").spawn({
+            let server = server.clone();
+            async move { server.world_server_heartbeat(host, heartbeat_port).await }
+        }));
+        let c = flatten(tokio::task::Builder::new().name("auth::realmlist").spawn({
+            let server = server.clone();
+            async move { server.realmlist_updater().await }
+        }));
+
+        try_join!(a, b, c);
 
         Ok(())
     }
@@ -210,7 +231,7 @@ async fn handle_connect_request(
 ) -> Result<RequestState> {
     if request.build != 12340 {
         return Ok(RequestState::Rejected {
-            command: AuthCommand::ConnectRequest,
+            command: AuthCommand::Connect,
             reason: ReturnCode::VersionInvalid,
         });
     };
@@ -218,26 +239,26 @@ async fn handle_connect_request(
     let mut buffer = [0u8; 16];
     let username = {
         let username = &mut buffer[..request.identifier_length as usize];
-        stream.read(username).await?;
+        stream.read_exact(username).await?;
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
-                debug!("user connected with invalid username: {}", e);
+                debug!("user connected with invalid username: {e}");
                 return Ok(RequestState::Rejected {
-                    command: AuthCommand::ConnectRequest,
+                    command: AuthCommand::Connect,
                     reason: ReturnCode::Failed,
                 });
             }
         }
     };
 
-    debug!("auth challenge for {}", username);
+    debug!("auth challenge for {username}");
 
     let (state, response) = match accounts.initiate_login(username).await {
         Ok(token) => (RequestState::ConnectChallenge { token }, token.into()),
         Err(reason) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::ConnectRequest,
+                command: AuthCommand::Connect,
                 reason: reason.into(),
             });
         }
@@ -254,13 +275,8 @@ async fn handle_connect_request(
         .with_varint_encoding()
         .serialize_into(&mut buffer[..len], &packet)?;
 
-    debug!(
-        "writing {:?} ({} bytes) for {:?}",
-        &buffer[..len],
-        len,
-        packet
-    );
-    stream.write(&buffer[..len]).await?;
+    debug!("writing {:?} ({len} bytes) for {packet:?}", &buffer[..len],);
+    stream.write_all(&buffer[..len]).await?;
 
     Ok(state)
 }
@@ -288,14 +304,14 @@ async fn handle_connect_proof(
         ),
         Err(status) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthLogonProof,
+                command: AuthCommand::Proof,
                 reason: status.into(),
             });
         }
     };
 
     stream
-        .write(&wow_bincode().serialize(&(AuthCommand::AuthLogonProof, response))?)
+        .write_all(&wow_bincode().serialize(&(AuthCommand::Proof, response))?)
         .await?;
 
     Ok(state)
@@ -309,7 +325,7 @@ async fn handle_reconnect_request(
 ) -> Result<RequestState> {
     if request.build != 12340 {
         return Ok(RequestState::Rejected {
-            command: AuthCommand::AuthReconnectChallenge,
+            command: AuthCommand::ReConnect,
             reason: ReturnCode::VersionInvalid,
         });
     }
@@ -317,13 +333,13 @@ async fn handle_reconnect_request(
     let mut buffer = [0u8; 16];
     let username = {
         let username = &mut buffer[..request.identifier_length as usize];
-        stream.read(username).await?;
+        stream.read_exact(username).await?;
         match str::from_utf8(username) {
             Ok(s) => s,
             Err(e) => {
-                debug!("user connected with invalid username: {}", e);
+                debug!("user connected with invalid username: {e}");
                 return Ok(RequestState::Rejected {
-                    command: AuthCommand::AuthReconnectChallenge,
+                    command: AuthCommand::ReConnect,
                     reason: ReturnCode::Failed,
                 });
             }
@@ -334,15 +350,15 @@ async fn handle_reconnect_request(
         Ok(token) => token,
         Err(e) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthReconnectChallenge,
+                command: AuthCommand::ReConnect,
                 reason: e.into(),
             })
         }
     };
 
     stream
-        .write(&bincode::options().serialize(&(
-            AuthCommand::AuthReconnectChallenge,
+        .write_all(&bincode::options().serialize(&(
+            AuthCommand::ReConnect,
             ReturnCode::Success,
             token.reconnect_proof,
             VERSION_CHALLENGE,
@@ -365,18 +381,18 @@ async fn handle_reconnect_proof(
     {
         Ok(_) => (
             RequestState::Realmlist,
-            (AuthCommand::AuthReconnectProof, ReturnCode::Success, 0u16),
+            (AuthCommand::ReProof, ReturnCode::Success, 0u16),
         ),
         Err(status) => {
             return Ok(RequestState::Rejected {
-                command: AuthCommand::AuthReconnectChallenge,
+                command: AuthCommand::ReConnect,
                 reason: status.into(),
             });
         }
     };
 
     debug!("user has reauthenticated");
-    stream.write(&bincode::serialize(&response)?).await?;
+    stream.write_all(&bincode::serialize(&response)?).await?;
     Ok(state)
 }
 
@@ -397,6 +413,6 @@ async fn handle_realmlist(realms: &dyn RealmList, stream: &mut TcpStream) -> Res
     }
     packet.extend_from_slice(&[0x10, 0x0]);
 
-    stream.write(&packet).await?;
+    stream.write_all(&packet).await?;
     Ok(RequestState::Realmlist)
 }

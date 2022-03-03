@@ -64,7 +64,7 @@ pub struct Realm {
 
 /// A trait that models a realmlist.
 #[async_trait]
-pub trait RealmList {
+pub trait RealmList: Send + Sync {
     /// Return the list of realms sorted by id.
     async fn realms(&self) -> Vec<Realm>;
 

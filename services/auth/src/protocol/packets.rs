@@ -234,7 +234,7 @@ pub struct ReplyPacket<T: Serialize> {
 impl ReplyPacket<ConnectChallenge> {
     pub fn new(message: ConnectChallenge) -> Self {
         Self {
-            command: AuthCommand::ConnectRequest,
+            command: AuthCommand::Connect,
             unknown: 0,
             status: ReturnCode::Success,
             message,
@@ -315,14 +315,13 @@ mod test {
     pub fn connect_challenge_unknown_account_format() {
         let data = [0x0, 0x0, 0x4];
 
-        let packet =
-            ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::UnknownAccount);
+        let packet = ReplyPacket::<()>::new(AuthCommand::Connect, ReturnCode::UnknownAccount);
         assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 
     #[test]
     pub fn encode_auth_command() {
-        let x = AuthCommand::AuthLogonProof;
+        let x = AuthCommand::Proof;
         assert_eq!(wow_bincode().serialize(&x).unwrap(), [0x01]);
     }
 
@@ -385,7 +384,7 @@ mod test {
         ];
 
         let response = (
-            AuthCommand::AuthLogonProof,
+            AuthCommand::Proof,
             ConnectProofResponse {
                 error: 0,
                 server_proof: [
@@ -405,7 +404,7 @@ mod test {
     pub fn reply_packet_format() {
         let data = [0x0, 0x0, 0x0];
 
-        let packet = ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::Success);
+        let packet = ReplyPacket::<()>::new(AuthCommand::Connect, ReturnCode::Success);
         assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 
@@ -413,7 +412,7 @@ mod test {
     pub fn ip_ban_format() {
         let data = [0x0, 0x0, 0x3];
 
-        let packet = ReplyPacket::<()>::new(AuthCommand::ConnectRequest, ReturnCode::Banned);
+        let packet = ReplyPacket::<()>::new(AuthCommand::Connect, ReturnCode::Banned);
         assert_eq!(&wow_bincode().serialize(&packet).unwrap(), &data)
     }
 }

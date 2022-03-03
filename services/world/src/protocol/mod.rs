@@ -3,26 +3,26 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, Result};
-use async_std::prelude::*;
+use anyhow::{anyhow, bail, Result};
 use azerust_game::realms::RealmId;
 use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::trace;
 
 use crate::{world::Session, wow_bincode::wow_bincode};
 
 /// Reads one or more packets from a frame in the stream
-pub async fn read_packets<R: async_std::io::Read + std::fmt::Debug + Unpin>(
-    stream: &mut R,
-    session: &Option<Arc<Session>>,
+pub async fn read_packets<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    session: Option<&Arc<Session>>,
 ) -> Result<Vec<ClientPacket>> {
     let mut buffer = [0u8; 2048];
-    let read_len = stream.read(&mut buffer).await?;
+    let read_len = reader.read(&mut buffer).await?;
 
     if read_len == 0 {
-        return Err(anyhow!("connection closed"));
+        bail!("connection closed");
     }
 
     let mut buffer = &buffer[..read_len];
@@ -89,11 +89,7 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
 
             let realm_id = RealmId(realm_id);
 
-            trace!(
-                "read auth session packet for {} on realm {:?}",
-                username,
-                realm_id
-            );
+            trace!("read auth session packet for {username} on realm {realm_id:?}",);
 
             let addons = {
                 use std::io::Read;
@@ -102,11 +98,9 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
                 let mut unzipped = Vec::with_capacity(expected_size);
                 let size = decoder.read_to_end(&mut unzipped)?;
                 if size != expected_size {
-                    return Err(anyhow!(
-                        "addon data not correctly decompressed, expected length {} got {}",
-                        expected_size,
-                        size
-                    ));
+                    bail!(
+                        "addon data not correctly decompressed, expected length {expected_size} got {size}"
+                    )
                 }
 
                 trace!("decoded addons: {:02X?}", &unzipped);
@@ -122,14 +116,13 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
                             .ok_or_else(|| anyhow!("couldnt find end of string"))?;
                         let name = std::str::from_utf8(&unzipped[..idx])?;
                         trace!(
-                            "read addon {}, getting rest of data {:02X?}",
-                            name,
+                            "read addon {name}, getting rest of data {:02X?}",
                             &unzipped[idx + 1..][..9]
                         );
                         let (has_sig, crc, crc2): (u8, _, _) =
                             wow_bincode().deserialize(&unzipped[idx + 1..][..9])?;
                         cursor += idx + 1 + 9;
-                        trace!("read addon {}, ending at {}", name, cursor);
+                        trace!("read addon {name}, ending at {cursor}");
                         Ok(Addon::new(name.to_string(), has_sig == 1, crc, crc2))
                     })
                     .collect::<Result<_>>()?
@@ -189,6 +182,17 @@ fn read_packet(code: OpCode, bytes: &[u8]) -> Result<ClientPacket> {
         OpCode::CmsgCharDelete => Ok(ClientPacket::CharacterDelete(
             wow_bincode().deserialize(bytes)?,
         )),
-        c => return Err(anyhow!("unsupported opcode: {:?}", c)),
+
+        OpCode::CmsgSetActiveVoiceChannel => todo!(),
+        OpCode::CmsgNameQuery => todo!(),
+        OpCode::CmsgPlayedTime => todo!(),
+        OpCode::CmsgQueryTime => todo!(),
+        OpCode::CmsgZoneupdate => todo!(),
+        OpCode::CmsgRequestAccountData => todo!(),
+        OpCode::CmsgUpdateAccountData => todo!(),
+        OpCode::CmsgSetActionbarToggles => todo!(),
+        OpCode::CmsgWorldStateUiTimerUpdate => todo!(),
+
+        c => bail!("unsupported opcode: {:?}", c),
     }
 }

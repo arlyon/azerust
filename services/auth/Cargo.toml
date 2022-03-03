@@ -6,9 +6,9 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-async-std = { version = "1", features = ["unstable", "async-channel", "attributes"] }
+tokio = { version = "1", features = ["macros", "tracing"] }
 async-trait = "0.1"
-sqlx = { version = "0.5", features = ["runtime-async-std-rustls", "mysql", "offline"] }
+sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "mysql", "offline"] }
 
 bincode = "2.0.0-dev"
 serde = { version = "1", features = ["derive"] }
@@ -34,11 +34,16 @@ tracing-subscriber = { version = "0.2", features = ["tracing-log"] }
 
 wow-srp = { path = "../../crates/wow-srp" }
 azerust-game = { path = "../../crates/game" }
+azerust-utils = { path = "../../crates/utils" }
 azerust-mysql-auth = { path = "../../crates/mysql-auth" }
-azerust-tide = { path = "../../crates/tide" }
+azerust-axum = { path = "../../crates/axum" }
 azerust-protocol = { path = "../../crates/protocol", features = ["auth"] }
 enumflags2 = "0.7.0-preview1"
 chrono = "0.4.19"
+tokio-stream = {version="0.1.8", features=["net", "time"]}
+futures-util = "0.3.19"
+tokio-console = "0.1.1"
+console-subscriber = "0.1.1"
 
 [dev-dependencies]
 test-case = "1"

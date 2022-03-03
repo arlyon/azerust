@@ -9,20 +9,17 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 anyhow = "1"
-async-std = { version = "1", features = [
-    "unstable",
-    "async-channel",
-    "attributes",
-] }
+tokio = { version = "1", features = ["macros", "tracing"] }
 human-panic = "1"
 structopt = "0.3"
 tracing = "0.1"
 azerust-game = { path = "../../crates/game" }
+azerust-utils = { path = "../../crates/utils" }
 azerust-mysql-auth = { path = "../../crates/mysql-auth" }
 azerust-protocol = { path = "../../crates/protocol", features = ["world"] }
 serde = "1"
 serde_yaml = "0.8"
-sqlx = { version = "0.5", features = ["runtime-async-std-rustls", "chrono", "offline"] }
+sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "chrono", "offline"] }
 tracing-subscriber = "0.2"
 bincode = "2.0.0-dev"
 num_enum = "0.5.4"
@@ -33,3 +30,5 @@ flate2 = "1.0.22"
 rust-crypto = "0.2"
 azerust-mysql-characters = { path = "../../crates/mysql-characters" }
 futures = "0.3.17"
+tokio-stream = {version="0.1.8", features=["net", "time"]}
+console-subscriber = "0.1.1"

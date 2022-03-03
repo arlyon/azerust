@@ -1,12 +1,15 @@
+use std::{net::Ipv4Addr, path::PathBuf};
+
 use anyhow::{Context, Result};
-use async_std::{net::Ipv4Addr, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthServerConfig {
     pub bind_address: Ipv4Addr,
     pub port: u16,
+    pub heartbeat_port: u16,
     pub api_port: Option<u16>,
+    pub console_port: Option<u16>,
 
     pub auth_database: String,
 }

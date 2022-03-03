@@ -1,6 +1,6 @@
 use async_graphql::{EmptySubscription, Schema};
 use azerust_game::{accounts::AccountService, realms::RealmList};
-use schemas::{Mutation, Query};
+pub use schemas::{Mutation, Query};
 
 mod models;
 mod schemas;

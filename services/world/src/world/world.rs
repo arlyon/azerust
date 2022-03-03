@@ -1,24 +1,28 @@
 use std::{
     collections::HashMap,
+    marker::PhantomData,
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use anyhow::{anyhow, Context, Result};
-use async_std::{
-    channel::{unbounded, Receiver, Sender},
-    net::TcpStream,
-    prelude::*,
-    stream::{interval, Interval},
-    sync::RwLock,
-};
 use azerust_game::{
     accounts::AccountService,
     characters::{AccountData, CharacterCreate, CharacterService},
     realms::{RealmId, RealmList},
 };
 use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
-use tracing::error;
+use tokio::{
+    io::AsyncWrite,
+    join,
+    net::{tcp::OwnedWriteHalf, TcpStream},
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver as Receiver, UnboundedSender as Sender},
+        Mutex, RwLock,
+    },
+    time::{interval, Interval},
+};
+use tracing::{error, trace};
 
 use super::Session;
 use crate::client::{Client, ClientId};
@@ -30,7 +34,7 @@ pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
     accounts: A,
     realms: R,
     characters: C,
-    receiver: Receiver<(ClientId, ClientPacket)>,
+    receiver: Mutex<Receiver<(ClientId, ClientPacket)>>,
     sender: Sender<(ClientId, ClientPacket)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
 
@@ -39,14 +43,14 @@ pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
 
 impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub fn new(id: RealmId, accounts: A, realms: R, characters: C) -> Self {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = unbounded_channel();
         Self {
             id,
             accounts,
             realms,
             characters,
             sender,
-            receiver,
+            receiver: Mutex::new(receiver),
             sessions: Default::default(),
 
             start: SystemTime::now(),
@@ -58,16 +62,21 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
         let mut timers = WorldTimers::new();
 
         let uptime = async {
-            while timers.uptime.next().await.is_some() {
+            loop {
+                timers.uptime.tick().await;
                 if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
-                    error!("error when setting uptime: {}", e);
+                    error!("error when setting uptime: {e}");
                 }
             }
         };
 
-        let ping_db = async { while timers.ping_db.next().await.is_some() {} };
+        let ping_db = async {
+            loop {
+                timers.ping_db.tick().await;
+            }
+        };
 
-        uptime.join(ping_db).await;
+        join!(ping_db, uptime);
         // todo(arlyon): update uptime and population
         // todo(arlyon): ping database
 
@@ -75,8 +84,11 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     }
 
     pub async fn handle_packets(&self) -> Result<()> {
+        let mut receiver = self.receiver.lock().await;
         loop {
-            let (id, packet) = self.receiver.recv().await?;
+            trace!("waiting for packet");
+            let (id, packet) = receiver.recv().await.ok_or_else(|| anyhow!("no packet"))?;
+            trace!("getting session");
             let session = {
                 let sessions = self.sessions.read().await;
                 match sessions.get(&id).cloned() {
@@ -85,13 +97,15 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 }
             };
 
+            trace!("handling packet");
             if self.handle_packet(session, packet).await.is_err() {
                 error!("could not handle packet from client {:?}", id);
             }
+            trace!("handled!");
         }
     }
 
-    pub async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
+    async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
         match packet {
             ClientPacket::AuthSession(_) => Ok(()), // ignore
             ClientPacket::KeepAlive => session.reset_timeout().await,
@@ -115,7 +129,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                     .await
             }
             ClientPacket::CharEnum => {
-                let id = session.client.read().await.account.unwrap();
+                let id = session
+                    .client
+                    .read()
+                    .await
+                    .account
+                    .ok_or_else(|| anyhow!("no account"))?;
                 let characters = self
                     .characters
                     .get_by_account(id)
@@ -173,7 +192,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
 
                 self.characters
                     .create_character(
-                        session.client.read().await.account.unwrap(),
+                        session
+                            .client
+                            .read()
+                            .await
+                            .account
+                            .ok_or_else(|| anyhow!("no account"))?,
                         CharacterCreate {
                             name,
                             race,
@@ -241,12 +265,16 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn create_session(
         &self,
         client: Arc<RwLock<Client>>,
-        stream: TcpStream,
+        writer: OwnedWriteHalf,
         session_key: [u8; 40],
         addons: Vec<Addon>,
-    ) -> Result<Arc<Session>> {
-        let session =
-            Arc::new(Session::new(client, stream, session_key, self.sender.clone(), addons).await?);
+    ) -> Result<Arc<Session>, (anyhow::Error, OwnedWriteHalf)> {
+        let session = Arc::new(
+            match Session::new(client, writer, session_key, self.sender.clone(), addons).await {
+                Ok(s) => s,
+                Err((e, w)) => return Err((e, w)),
+            },
+        );
         self.sessions
             .write()
             .await

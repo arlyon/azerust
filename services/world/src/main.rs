@@ -12,15 +12,16 @@
     clippy::unimplemented
 )]
 
-use std::{net::Ipv4Addr, time::Duration};
+use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use azerust_game::realms::RealmId;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use azerust_mysql_characters::MySQLCharacterService;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
+use tokio::{task::JoinHandle, try_join};
 use tracing::debug;
 
 use crate::{conf::WorldServerConfig, opt::Opt, worldserver::WorldServer};
@@ -33,19 +34,24 @@ mod world;
 mod worldserver;
 mod wow_bincode;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     setup_panic!();
-    tracing_subscriber::fmt::init();
 
     let opts: Opt = Opt::from_args();
-    let config = WorldServerConfig::read(&opts.config).await;
+    let config = WorldServerConfig::read(&opts.config).await?;
+    if let Some(port) = config.console_port {
+        console_subscriber::ConsoleLayer::builder()
+            .server_addr((config.bind_address, port))
+            .init();
+    }
 
     match opts.command {
         Some(opt::OptCommand::Init) => {
             let auth = WorldServerConfig {
                 bind_address: "0.0.0.0".parse::<Ipv4Addr>().expect("Valid IP"),
                 port: 3724,
+                console_port: None,
                 auth_server_address: "localhost:1234".to_string(),
 
                 realm_id: RealmId(1),
@@ -57,13 +63,13 @@ async fn main() -> Result<()> {
             };
             auth.write(&opts.config).await?;
         }
-        None => start_server(&config?).await?,
+        None => start_server(config).await?,
     };
 
     Ok(())
 }
 
-async fn start_server(config: &WorldServerConfig) -> Result<()> {
+async fn start_server(config: WorldServerConfig) -> Result<()> {
     let auth_pool = MySqlPool::connect(&config.auth_database)
         .await
         .context("could not start the database pool")?;
@@ -83,7 +89,8 @@ async fn start_server(config: &WorldServerConfig) -> Result<()> {
         accounts,
         realms,
         characters,
-        config.auth_server_address.clone(),
+        config.auth_server_address,
     );
+
     server.start().await
 }
