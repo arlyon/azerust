@@ -18,6 +18,7 @@ use azerust_protocol::{
     world::{OpCode, ResponseCode},
     AuthSession, ClientPacket,
 };
+use azerust_utils::flatten;
 use bincode::Options;
 use rand::Rng;
 use sha1::Digest;
@@ -343,13 +344,5 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
             error!("could not create WorldSession: {e}");
             return Err((ResponseCode::AuthSystemError, writer));
         }
-    }
-}
-
-async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
-    match handle.await {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(err)) => Err(err),
-        Err(err) => Err(anyhow!("join failed: {err}")),
     }
 }

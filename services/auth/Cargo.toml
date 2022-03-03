@@ -34,6 +34,7 @@ tracing-subscriber = { version = "0.2", features = ["tracing-log"] }
 
 wow-srp = { path = "../../crates/wow-srp" }
 azerust-game = { path = "../../crates/game" }
+azerust-utils = { path = "../../crates/utils" }
 azerust-mysql-auth = { path = "../../crates/mysql-auth" }
 azerust-axum = { path = "../../crates/axum" }
 azerust-protocol = { path = "../../crates/protocol", features = ["auth"] }

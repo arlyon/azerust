@@ -1,0 +1,10 @@
+[package]
+edition = "2021"
+name = "azerust-utils"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.55"
+tokio = "1.17.0"

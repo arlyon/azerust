@@ -3,15 +3,17 @@ use std::{
     fmt, iter,
     net::Ipv4Addr,
     str,
+    sync::Arc,
     time::{self, Instant},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
 };
 use azerust_protocol::auth::{AuthCommand, ReturnCode};
+use azerust_utils::flatten;
 use bincode::Options;
 use derivative::Derivative;
 use derive_more::Display;
@@ -21,6 +23,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
     time::interval,
+    try_join,
 };
 use tokio_stream::{
     iter,
@@ -188,6 +191,33 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
                 break;
             }
         }
+
+        Ok(())
+    }
+}
+
+impl<
+        T: 'static + AccountService + fmt::Debug + Send + Sync,
+        R: 'static + RealmList + Send + Sync,
+    > AuthServer<T, R>
+{
+    pub async fn start(self, host: Ipv4Addr, port: u16, heartbeat_port: u16) -> Result<()> {
+        let server = Arc::new(self);
+
+        let a = flatten(tokio::task::Builder::new().name("auth::server").spawn({
+            let server = server.clone();
+            async move { server.authentication(host, port).await }
+        }));
+        let b = flatten(tokio::task::Builder::new().name("auth::heartbeat").spawn({
+            let server = server.clone();
+            async move { server.world_server_heartbeat(host, heartbeat_port).await }
+        }));
+        let c = flatten(tokio::task::Builder::new().name("auth::realmlist").spawn({
+            let server = server.clone();
+            async move { server.realmlist_updater().await }
+        }));
+
+        try_join!(a, b, c);
 
         Ok(())
     }

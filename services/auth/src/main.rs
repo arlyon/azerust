@@ -23,6 +23,7 @@ use anyhow::{anyhow, Result};
 use azerust_axum::api;
 use azerust_game::accounts::AccountService;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
+use azerust_utils::flatten;
 use conf::AuthServerConfig;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
@@ -87,14 +88,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {
-    match handle.await {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(err)) => Err(err),
-        Err(err) => Err(anyhow!("join failed: {err}")),
-    }
-}
-
 async fn start_server(
     AuthServerConfig {
         bind_address,
@@ -110,24 +103,7 @@ async fn start_server(
     let accounts = MySQLAccountService::new(pool.clone());
     let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(10));
 
-    let server = Arc::new(AuthServer::new(accounts.clone(), realms.clone()));
-
-    let a = flatten(tokio::task::Builder::new().name("auth::server").spawn({
-        let server = server.clone();
-        async move { server.authentication(bind_address, port).await }
-    }));
-    let b = flatten(tokio::task::Builder::new().name("auth::heartbeat").spawn({
-        let server = server.clone();
-        async move {
-            server
-                .world_server_heartbeat(bind_address, heartbeat_port)
-                .await
-        }
-    }));
-    let c = flatten(tokio::task::Builder::new().name("auth::realmlist").spawn({
-        let server = server.clone();
-        async move { server.realmlist_updater().await }
-    }));
+    let server = AuthServer::new(accounts.clone(), realms.clone());
 
     if let Some(api_port) = api_port {
         let addr = SocketAddr::new(bind_address.into(), api_port);
@@ -141,9 +117,9 @@ async fn start_server(
                 }),
         );
 
-        try_join!(a, b, c, api)?;
+        try_join!(server.start(bind_address, port, heartbeat_port), api)?;
     } else {
-        try_join!(a, b, c)?;
+        server.start(bind_address, port, heartbeat_port).await?;
     }
 
     Ok(())
