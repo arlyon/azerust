@@ -35,7 +35,7 @@ off the incredible Trinitycore project.
 
 ```bash
 > cargo make fetch-db
-> docker compose up
+> docker compose --profile server up
 ```
 
 The downloaded SQL scripts will be used to set up the databases.

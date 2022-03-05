@@ -8,18 +8,21 @@ RUN cargo chef prepare
 
 FROM chef as cacher
 COPY --from=planner /app/recipe.json recipe.json
+ENV RUSTFLAGS --cfg tokio_unstable
 RUN cargo chef cook --release
 
 FROM chef as auth-builder
 COPY . .
 COPY --from=cacher /app/target target
 ENV SQLX_OFFLINE true
+ENV RUSTFLAGS --cfg tokio_unstable
 RUN cargo build --bin azerust-auth --release
 
 FROM chef as world-builder
 COPY . .
 COPY --from=cacher /app/target target
-ENV SQLX_OFFLINE true    
+ENV SQLX_OFFLINE true
+ENV RUSTFLAGS --cfg tokio_unstable
 RUN cargo build --bin azerust-world --release
 
 FROM scratch as auth

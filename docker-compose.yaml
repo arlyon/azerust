@@ -7,17 +7,20 @@ services:
     profiles: ["server"]
     build:
       context: .
+      target: world
     depends_on: [database]
     environment: *log-level
     volumes:
       - ./config-world-compose.yaml:/config.yaml:Z
     ports:
       - "8085:8085"
+      - "9001:9001"
   auth:
     image: ghcr.io/arlyon/azerust-auth:master
     profiles: ["server"]
     build:
       context: .
+      target: auth
     depends_on: [database]
     environment: *log-level
     volumes:
@@ -25,6 +28,7 @@ services:
     ports:
       - "3724:3724"
       - "8000:8000"
+      - "9000:9000"
   database:
     image: "mariadb:10"
     environment:
