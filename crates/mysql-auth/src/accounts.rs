@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, time::Duration};
 
 use async_trait::async_trait;
 use azerust_game::{
@@ -10,7 +10,7 @@ use azerust_game::{
 };
 use chrono::Utc;
 use sqlx::MySqlPool;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
 #[derive(Debug, Clone)]
@@ -226,5 +226,40 @@ impl AccountService for MySQLAccountService {
         token
             .accept(proof_data, client_proof)
             .map(|_| client_proof.to_owned())
+    }
+
+    /// Set a ban for a given account.
+    ///
+    /// duration: the duration of the ban. If `None`, the ban is permanent.
+    ///
+    /// note: permabans are represented by a unbandate of the same value as the bandate.
+    async fn set_ban(
+        &self,
+        id: AccountId,
+        author: &str,
+        duration: Option<Duration>,
+        reason: Option<&str>,
+    ) -> Result<(), AccountOpError> {
+        let bandate = Utc::now();
+        let unbandate = match duration {
+            Some(d) => bandate + chrono::Duration::from_std(d).unwrap(),
+            None => bandate,
+        };
+
+        sqlx::query!(
+            "INSERT INTO account_banned (id, bandate, unbandate, bannedby, banreason) values (?, ?, ?, ?, ?)",
+            id,
+            bandate.timestamp(),
+            unbandate.timestamp(),
+            author,
+            reason.unwrap_or("")
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AccountOpError::PersistError(e.to_string()))?;
+
+        info!("banned {id} for {duration:?}");
+
+        Ok(())
     }
 }

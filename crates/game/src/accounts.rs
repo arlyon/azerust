@@ -3,6 +3,8 @@
 //! The accounts module handles the basic manipulation
 //! of accounts such as login and creation / deletion.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use derive_more::Display;
@@ -179,6 +181,14 @@ pub trait AccountService: Send + Sync {
         proof_data: &[u8; 16],
         client_proof: &[u8; 20],
     ) -> Result<[u8; 20], LoginFailure>;
+
+    async fn set_ban(
+        &self,
+        id: AccountId,
+        author: &str,
+        duration: Option<Duration>,
+        reason: Option<&str>,
+    ) -> Result<(), AccountOpError>;
 }
 
 /// Errors that may occur when running account operations.
