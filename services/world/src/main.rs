@@ -44,6 +44,8 @@ async fn main() -> Result<()> {
         console_subscriber::ConsoleLayer::builder()
             .server_addr((config.bind_address, port))
             .init();
+    } else {
+        tracing_subscriber::fmt::init();
     }
 
     match opts.command {

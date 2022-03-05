@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use azerust_game::{
     accounts::AccountService,
     characters::CharacterService,
@@ -252,23 +252,28 @@ impl<
         try_join!(
             flatten(tokio::task::Builder::new().name("world::heartbeat").spawn({
                 let cloned = server.clone();
-                async move { cloned.auth_server_heartbeat().await }
+                async move {
+                    cloned
+                        .auth_server_heartbeat()
+                        .await
+                        .context("heartbeat error")
+                }
             })),
             flatten(tokio::task::Builder::new().name("world::clients").spawn({
                 let cloned = server.clone();
-                async move { cloned.accept_clients().await }
+                async move { cloned.accept_clients().await.context("client error") }
             })),
             flatten(tokio::task::Builder::new().name("world::update").spawn({
                 let cloned = server.clone();
-                async move { cloned.update().await }
+                async move { cloned.update().await.context("update error") }
             })),
             flatten(tokio::task::Builder::new().name("world::packets").spawn({
                 let cloned = server.clone();
-                async move { cloned.world.handle_packets().await }
+                async move { cloned.world.handle_packets().await.context("packet error") }
             })),
             flatten(tokio::task::Builder::new().name("world::timers").spawn({
                 let cloned = server.clone();
-                async move { cloned.world.timers().await }
+                async move { cloned.world.timers().await.context("timer error") }
             }))
         )?;
 

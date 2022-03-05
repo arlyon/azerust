@@ -206,18 +206,28 @@ impl<
 
         let a = flatten(tokio::task::Builder::new().name("auth::server").spawn({
             let server = server.clone();
-            async move { server.authentication(host, port).await }
+            async move {
+                server
+                    .authentication(host, port)
+                    .await
+                    .context("server error")
+            }
         }));
         let b = flatten(tokio::task::Builder::new().name("auth::heartbeat").spawn({
             let server = server.clone();
-            async move { server.world_server_heartbeat(host, heartbeat_port).await }
+            async move {
+                server
+                    .world_server_heartbeat(host, heartbeat_port)
+                    .await
+                    .context("hearthbeat error")
+            }
         }));
         let c = flatten(tokio::task::Builder::new().name("auth::realmlist").spawn({
             let server = server.clone();
-            async move { server.realmlist_updater().await }
+            async move { server.realmlist_updater().await.context("realmlist error") }
         }));
 
-        try_join!(a, b, c);
+        try_join!(a, b, c)?;
 
         Ok(())
     }
