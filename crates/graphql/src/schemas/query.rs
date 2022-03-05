@@ -31,10 +31,10 @@ where
         Ok(accounts.into_iter().map(Account).collect())
     }
 
-    async fn get_user(&self, ctx: &Context<'_>, username: String) -> FieldResult<Account> {
+    async fn get_user(&self, ctx: &Context<'_>, username: String) -> FieldResult<Option<Account>> {
         let service = ctx.data::<A>()?;
         let account = service.get_by_username(&username).await?;
-        Ok(Account(account))
+        Ok(account.map(|a| Account(a)))
     }
 
     async fn get_realms(&self, ctx: &Context<'_>) -> FieldResult<Vec<Realm>> {

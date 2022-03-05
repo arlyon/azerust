@@ -300,7 +300,7 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
     }
 
     let account = match accounts.get_by_username(&auth_session.username).await {
-        Ok(e) => e,
+        Ok(Some(e)) => e,
         _ => return Err((ResponseCode::AuthUnknownAccount, writer)),
     };
 

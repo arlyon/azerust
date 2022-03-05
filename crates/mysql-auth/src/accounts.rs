@@ -115,13 +115,13 @@ impl AccountService for MySQLAccountService {
     }
 
     #[instrument(skip(self))]
-    async fn get_by_username(&self, username: &str) -> Result<Account, AccountOpError> {
-        sqlx::query_as!(
+    async fn get_by_username(&self, username: &str) -> Result<Option<Account>, AccountOpError> {
+        let mut account = match sqlx::query_as!(
             Account,
             r#"SELECT id as "id: _", username, session_key_auth as "session_key: _",salt as "salt: _", verifier as "verifier: _", email, joindate, last_login, NULL as "ban_status: _", online FROM account WHERE username = ?"#,
             username
         )
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(|e| AccountOpError::PersistError(e.to_string()))
     }
