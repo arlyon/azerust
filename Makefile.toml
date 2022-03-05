@@ -1,4 +1,5 @@
 [tasks.prepare]
+# this is to handle this usecase: https://github.com/launchbadge/sqlx/issues/1223#issuecomment-923823274
 script = '''
 #!/usr/bin/env bash
 rm -rf target/sqlx
