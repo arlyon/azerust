@@ -15,7 +15,6 @@
 
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    sync::Arc,
     time::Duration,
 };
 
@@ -28,7 +27,7 @@ use conf::AuthServerConfig;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
-use tokio::{task::JoinHandle, try_join};
+use tokio::try_join;
 
 use crate::{
     authserver::AuthServer,

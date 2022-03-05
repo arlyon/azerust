@@ -43,8 +43,10 @@ pub struct AuthSession {
 #[derive(Debug, Clone)]
 pub struct Addon {
     pub name: String,
+    #[allow(dead_code)]
     signature: bool,
     pub crc: u32,
+    #[allow(dead_code)]
     crc2: u32,
 }
 

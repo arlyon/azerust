@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    marker::PhantomData,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -13,9 +12,8 @@ use azerust_game::{
 };
 use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
 use tokio::{
-    io::AsyncWrite,
     join,
-    net::{tcp::OwnedWriteHalf, TcpStream},
+    net::tcp::OwnedWriteHalf,
     sync::{
         mpsc::{unbounded_channel, UnboundedReceiver as Receiver, UnboundedSender as Sender},
         Mutex, RwLock,

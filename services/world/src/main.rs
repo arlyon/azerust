@@ -12,16 +12,15 @@
     clippy::unimplemented
 )]
 
-use std::{net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{net::Ipv4Addr, time::Duration};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use azerust_game::realms::RealmId;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use azerust_mysql_characters::MySQLCharacterService;
 use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
-use tokio::{task::JoinHandle, try_join};
 use tracing::debug;
 
 use crate::{conf::WorldServerConfig, opt::Opt, worldserver::WorldServer};

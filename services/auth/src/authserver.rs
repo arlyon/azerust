@@ -7,7 +7,7 @@ use std::{
     time::{self, Instant},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Context, Result};
 use azerust_game::{
     accounts::{AccountService, ConnectToken, ReconnectToken},
     realms::{RealmFlags, RealmList},
@@ -184,9 +184,10 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
             };
 
             if let RequestState::Rejected { command, reason } = state {
-                let mut buffer = [0u8; 2];
-                wow_bincode().serialize_into(&mut buffer[..], &(command, reason))?;
-                info!("rejecting {:?} due to {:?}", command, reason);
+                let mut buffer = [0u8; 3];
+                wow_bincode()
+                    .serialize_into(&mut buffer[..], &ReplyPacket::<()>::new(command, reason))?;
+                info!("rejecting command {:?} due to {:?}", command, reason);
                 stream.write_all(&buffer).await?;
                 break;
             }

@@ -23,10 +23,9 @@ use bincode::Options;
 use rand::Rng;
 use sha1::Digest;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWriteExt},
     net::{tcp::OwnedWriteHalf, TcpListener, UdpSocket},
     sync::RwLock,
-    task::JoinHandle,
     time::interval,
     try_join,
 };

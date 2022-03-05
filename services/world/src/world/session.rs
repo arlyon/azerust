@@ -17,7 +17,7 @@ use azerust_protocol::{
 use bincode::Options;
 use tokio::{
     io::AsyncWriteExt,
-    net::{tcp::OwnedWriteHalf, TcpStream},
+    net::tcp::OwnedWriteHalf,
     sync::{mpsc::UnboundedSender as Sender, Mutex, RwLock},
 };
 use tracing::trace;
