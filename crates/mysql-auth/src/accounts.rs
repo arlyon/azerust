@@ -123,33 +123,47 @@ impl AccountService for MySQLAccountService {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| AccountOpError::PersistError(e.to_string()))
+        .map_err(|e| AccountOpError::PersistError(e.to_string()))? {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        if let Some(ban) = sqlx::query!(
+                "SELECT  (ab.unbandate > UNIX_TIMESTAMP() OR ab.unbandate = ab.bandate) as 'is_banned: bool', (ab.unbandate = ab.bandate) as 'is_permabanned: bool' FROM account_banned ab where ab.id = ?", 
+                account.id
+            ).fetch_optional(&self.pool).await.map_err(|e| AccountOpError::PersistError(e.to_string()))? {
+                account.ban_status = match (ban.is_banned, ban.is_permabanned) {
+                    (_, true) => Some(BanStatus::Permanent),
+                    (Some(true), _) => Some(BanStatus::Temporary),
+                    _ => None,
+                };
+            }
+
+        Ok(Some(account))
     }
 
     async fn initiate_login(&self, username: &str) -> Result<ConnectToken, LoginFailure> {
-        let account = match self.get_by_username(username).await {
-            Ok(Account {
-                ban_status: Some(status),
-                username,
-                ..
-            }) => {
-                debug!("banned user {username} attempted to log in");
-                return match status {
-                    BanStatus::Temporary => Err(LoginFailure::Suspended),
-                    BanStatus::Permanent => Err(LoginFailure::Banned),
-                };
-            }
-            Ok(x) => x,
-            Err(_) => {
-                return Err(LoginFailure::UnknownAccount);
-            }
-        };
+        let account = self
+            .get_by_username(username)
+            .await
+            .map_err(|_| LoginFailure::DatabaseError)?
+            .ok_or(LoginFailure::UnknownAccount)?;
 
-        Ok(ConnectToken::new(
-            &account.username,
-            account.salt,
-            account.verifier,
-        ))
+        match account.ban_status {
+            Some(BanStatus::Permanent) => {
+                warn!("permanently banned user {username} tried to login");
+                Err(LoginFailure::Banned)
+            }
+            Some(BanStatus::Temporary) => {
+                warn!("banned user {username} tried to login");
+                Err(LoginFailure::Suspended)
+            }
+            None => Ok(ConnectToken::new(
+                &account.username,
+                account.salt,
+                account.verifier,
+            )),
+        }
     }
 
     async fn initiate_relogin(&self, username: &str) -> Result<ReconnectToken, LoginFailure> {
