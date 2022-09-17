@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use azerust_game::realms::RealmId;
-use azerust_protocol::{world::OpCode, Addon, AuthSession, ClientPacket};
+use azerust_protocol::world::{Addon, AuthSession, ClientPacket, OpCode};
 use bincode::Options;
 use flate2::read::ZlibDecoder;
 use tokio::io::{AsyncRead, AsyncReadExt};

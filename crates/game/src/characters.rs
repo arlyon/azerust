@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use thiserror::Error;
 
@@ -102,6 +103,13 @@ impl AccountData {
             self.per_char_chat,
         ]
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum AccountDataType {
+    World,
+    PerChar,
+    Account,
 }
 
 #[derive(Debug, Clone)]

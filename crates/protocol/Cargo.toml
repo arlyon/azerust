@@ -12,8 +12,10 @@ world = ["rust-crypto"]
 auth = []
 
 [dependencies]
+assert-size-attribute = { version = "0.1.0", path = "../assert-size-attribute" }
 azerust-game = { path = "../../crates/game" }
 derive_more = "0.99.16"
 num_enum = "0.5.4"
 rust-crypto = {version = "0.2.36", optional = true }
 serde = { version = "1.0.130", features = ["derive"] }
+static_assertions = "1.1.0"

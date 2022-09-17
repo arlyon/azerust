@@ -11,10 +11,11 @@ use anyhow::{Context, Result};
 use azerust_game::characters::Character;
 use azerust_protocol::{
     header_crypto::HeaderCrypto,
-    world::{OpCode, ResponseCode},
-    Addon, ClientPacket, ClientVersion, ServerPacket,
+    world::{Addon, ClientPacket, OpCode, ResponseCode, ServerPacket},
+    ClientVersion,
 };
 use bincode::Options;
+use opentelemetry::Context as OpentelemetryContext;
 use tokio::{
     io::AsyncWriteExt,
     net::tcp::OwnedWriteHalf,
@@ -24,9 +25,10 @@ use tracing::trace;
 
 use crate::{
     client::{Client, ClientId},
-    world::world::GLOBAL_CACHE_MASK,
     wow_bincode::wow_bincode,
 };
+
+pub const GLOBAL_CACHE_MASK: u32 = 0x15;
 
 /// An active session in the world.
 pub struct Session {
@@ -35,12 +37,12 @@ pub struct Session {
     pub client: Arc<RwLock<Client>>,
     stream: Mutex<OwnedWriteHalf>,
     encryption: Mutex<HeaderCrypto>,
-    sender: Sender<(ClientId, ClientPacket)>,
+    sender: Sender<(ClientId, ClientPacket, OpentelemetryContext)>,
     latency: AtomicU32,
     timeout: Mutex<Instant>,
     addons: Vec<Addon>,
 
-    character: Arc<RwLock<Option<Character>>>,
+    pub character: Arc<RwLock<Option<Character>>>,
 }
 
 impl Session {
@@ -48,7 +50,7 @@ impl Session {
         client: Arc<RwLock<Client>>,
         stream: OwnedWriteHalf,
         session_key: [u8; 40],
-        sender: Sender<(ClientId, ClientPacket)>,
+        sender: Sender<(ClientId, ClientPacket, OpentelemetryContext)>,
         addons: Vec<Addon>,
     ) -> Result<Self, (anyhow::Error, OwnedWriteHalf)> {
         let client_id = client.read().await.id;
@@ -89,7 +91,7 @@ impl Session {
     /// receive a packet from the client
     pub async fn receive_packet(&self, p: ClientPacket) -> Result<()> {
         self.sender
-            .send((self.client_id, p))
+            .send((self.client_id, p, opentelemetry::Context::current()))
             // .await
             .context("couldnt send packet")
     }
@@ -187,7 +189,7 @@ impl Session {
                 )
                 .await?;
             }
-            ServerPacket::AccountDataTimes(account_data) => {
+            ServerPacket::AccountDataTimes(account_data, _type) => {
                 let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u32;
 
                 let mut buffer = [0u8; 4 + 1 + 4 + 4 * 3];
@@ -224,6 +226,28 @@ impl Session {
                 self.write_packet(OpCode::SmsgCharDelete, &[code as u8])
                     .await?;
             }
+            ServerPacket::AuraUpdateAll => todo!(),
+            ServerPacket::ContactList(_) => todo!(),
+            ServerPacket::VerifyWorld(_) => todo!(),
+            ServerPacket::FeatureSystemStatus => todo!(),
+            ServerPacket::LearnedDanceMoves => todo!(),
+            ServerPacket::Motd(_) => todo!(),
+            ServerPacket::SysMessage(_) => todo!(),
+            ServerPacket::CinematicStart(_) => todo!(),
+            ServerPacket::SocialList => todo!(),
+            ServerPacket::BindPointUpdate { x, y, z, map, area } => todo!(),
+            ServerPacket::TalentsInfo => todo!(),
+            ServerPacket::InstanceDifficulty => todo!(),
+            ServerPacket::InitialSpells => todo!(),
+            ServerPacket::SendUnlearnSpells => todo!(),
+            ServerPacket::InitialActionButtons => todo!(),
+            ServerPacket::InitializeFactions => todo!(),
+            ServerPacket::AllAchievementData => todo!(),
+            ServerPacket::EquipmentList => todo!(),
+            ServerPacket::LoginSetTimeSpeed => todo!(),
+            ServerPacket::SetForcedReactions => todo!(),
+            ServerPacket::SendTimeSync(_) => todo!(),
+            ServerPacket::InitialWorldStates(_) => todo!(),
         };
         trace!("packet sent!");
 

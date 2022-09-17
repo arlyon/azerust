@@ -14,10 +14,7 @@ use azerust_game::{
     characters::CharacterService,
     realms::{RealmId, RealmList},
 };
-use azerust_protocol::{
-    world::{OpCode, ResponseCode},
-    AuthSession, ClientPacket,
-};
+use azerust_protocol::world::{AuthSession, ClientPacket, OpCode, ResponseCode};
 use azerust_utils::flatten;
 use bincode::Options;
 use rand::Rng;

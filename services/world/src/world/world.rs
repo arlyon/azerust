@@ -7,10 +7,16 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use azerust_game::{
     accounts::AccountService,
-    characters::{AccountData, CharacterCreate, CharacterService},
+    characters::{AccountData, AccountDataType, CharacterCreate, CharacterService},
     realms::{RealmId, RealmList},
 };
-use azerust_protocol::{world::ResponseCode, Addon, ClientPacket, Item, ServerPacket};
+use azerust_protocol::world::{
+    Addon, ClientPacket, Item, Position, RelationType, ResponseCode, ServerPacket, VerifyWorld,
+};
+use opentelemetry::{
+    trace::{SpanContext, TraceContextExt},
+    Context as OpentelemetryContext,
+};
 use tokio::{
     join,
     net::tcp::OwnedWriteHalf,
@@ -20,20 +26,19 @@ use tokio::{
     },
     time::{interval, Interval},
 };
-use tracing::{error, trace};
+use tracing::{error, info, instrument, span, trace, warn, Level};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::Session;
 use crate::client::{Client, ClientId};
-
-pub const GLOBAL_CACHE_MASK: u32 = 0x15;
 
 pub struct World<A: AccountService, R: RealmList, C: CharacterService> {
     id: RealmId,
     accounts: A,
     realms: R,
     characters: C,
-    receiver: Mutex<Receiver<(ClientId, ClientPacket)>>,
-    sender: Sender<(ClientId, ClientPacket)>,
+    receiver: Mutex<Receiver<(ClientId, ClientPacket, OpentelemetryContext)>>,
+    sender: Sender<(ClientId, ClientPacket, OpentelemetryContext)>,
     sessions: Arc<RwLock<HashMap<ClientId, Arc<Session>>>>,
 
     start: SystemTime,
@@ -56,12 +61,14 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     }
 
     /// runs background tasks
+    #[instrument(skip(self))]
     pub async fn timers(&self) -> Result<()> {
         let mut timers = WorldTimers::new();
 
         let uptime = async {
             loop {
                 timers.uptime.tick().await;
+                // todo(arlyon): set population
                 if let Err(e) = self.realms.set_uptime(self.id, self.start, 0).await {
                     error!("error when setting uptime: {e}");
                 }
@@ -70,13 +77,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
 
         let ping_db = async {
             loop {
+                // todo(arlyon): ping database
                 timers.ping_db.tick().await;
             }
         };
 
         join!(ping_db, uptime);
-        // todo(arlyon): update uptime and population
-        // todo(arlyon): ping database
 
         Ok(())
     }
@@ -84,9 +90,16 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
     pub async fn handle_packets(&self) -> Result<()> {
         let mut receiver = self.receiver.lock().await;
         loop {
-            trace!("waiting for packet");
-            let (id, packet) = receiver.recv().await.ok_or_else(|| anyhow!("no packet"))?;
-            trace!("getting session");
+            let (id, packet, ctx) = receiver.recv().await.ok_or_else(|| anyhow!("no packet"))?;
+            let span = span!(
+                Level::TRACE,
+                "handle_packets",
+                "client_id" = id.0,
+                "otel.kind" = "CONSUMER",
+            );
+            span.set_parent(ctx);
+            let _guard = span.enter();
+
             let session = {
                 let sessions = self.sessions.read().await;
                 match sessions.get(&id).cloned() {
@@ -95,14 +108,13 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 }
             };
 
-            trace!("handling packet");
-            if self.handle_packet(session, packet).await.is_err() {
-                error!("could not handle packet from client {:?}", id);
+            if let Err(e) = self.handle_packet(session, packet).await {
+                error!("could not handle packet from client {id:?}: {e}");
             }
-            trace!("handled!");
         }
     }
 
+    #[instrument(skip(self, session))]
     async fn handle_packet(&self, session: Arc<Session>, packet: ClientPacket) -> Result<()> {
         match packet {
             ClientPacket::AuthSession(_) => Ok(()), // ignore
@@ -123,8 +135,12 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                 };
 
                 session
-                    .send_packet(ServerPacket::AccountDataTimes(Box::new(data)))
+                    .send_packet(ServerPacket::AccountDataTimes(
+                        Box::new(data),
+                        AccountDataType::Account,
+                    ))
                     .await
+                    .context("couldn't write")
             }
             ClientPacket::CharEnum => {
                 let id = session
@@ -228,7 +244,144 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                     .get(id.try_into()?)
                     .await
                     .context("unable to get character list")?;
-                session.login(character).await
+
+                let name = character.name.clone();
+
+                trace!("loggin in {name}");
+
+                let verify_world = VerifyWorld {
+                    map_id: character.map.into(),
+                    position: Position {
+                        x: character.position_x,
+                        y: character.position_y,
+                        z: character.position_z,
+                        orientation: 0.0, // todo(arlyon): orientation
+                    },
+                };
+
+                let _old_char = session.login(character).await?;
+
+                // verify world
+                {
+                    session
+                        .send_packet(ServerPacket::VerifyWorld(verify_world))
+                        .await?;
+                }
+
+                // account data times
+                {
+                    let data = self
+                        .characters
+                        .account_data(session.client.read().await.account.expect("account"))
+                        .await?;
+
+                    session
+                        .send_packet(ServerPacket::AccountDataTimes(
+                            Box::new(data),
+                            AccountDataType::PerChar,
+                        ))
+                        .await?;
+                }
+
+                session
+                    .send_packet(ServerPacket::FeatureSystemStatus)
+                    .await?;
+
+                session
+                    .send_packet(ServerPacket::Motd("Hello World".to_string()))
+                    .await?;
+
+                session
+                    .send_packet(ServerPacket::SysMessage(
+                        env!("CARGO_PKG_VERSION").to_string(),
+                    ))
+                    .await?;
+
+                session.send_packet(ServerPacket::LearnedDanceMoves).await?;
+
+                {
+                    // pre-map packets
+
+                    session.send_packet(ServerPacket::SocialList).await?;
+
+                    session
+                        .send_packet(ServerPacket::BindPointUpdate {
+                            x: -6240.32,
+                            y: 331.033,
+                            z: 382.758,
+                            map: 0,
+                            area: 1,
+                        })
+                        .await?;
+                    session.send_packet(ServerPacket::TutorialData).await?;
+
+                    session.send_packet(ServerPacket::TalentsInfo).await?;
+                    session
+                        .send_packet(ServerPacket::InstanceDifficulty)
+                        .await?;
+                    session.send_packet(ServerPacket::InitialSpells).await?;
+                    session.send_packet(ServerPacket::SendUnlearnSpells).await?;
+                    session
+                        .send_packet(ServerPacket::InitialActionButtons)
+                        .await?;
+
+                    session
+                        .send_packet(ServerPacket::InitializeFactions)
+                        .await?;
+                    session
+                        .send_packet(ServerPacket::AllAchievementData)
+                        .await?;
+                    session
+                        .send_packet(ServerPacket::ContactList(vec![
+                            RelationType::Friend,
+                            RelationType::Muted,
+                            RelationType::Ignore,
+                        ]))
+                        .await?;
+                    session.send_packet(ServerPacket::AuraUpdateAll).await?;
+                    session.send_packet(ServerPacket::EquipmentList).await?;
+                    session.send_packet(ServerPacket::LoginSetTimeSpeed).await?;
+                    session
+                        .send_packet(ServerPacket::SetForcedReactions)
+                        .await?;
+                }
+
+                // show cinematic
+                if false {
+                    session.send_packet(ServerPacket::CinematicStart(1)).await?;
+                    // todo(arlyon): cinematic manager
+
+                    session
+                        .send_packet(ServerPacket::SysMessage(
+                            "New character created!".to_string(),
+                        ))
+                        .await?;
+                }
+
+                // add player to map
+
+                {
+                    // send packets after adding to map
+                    session
+                        .send_packet(ServerPacket::InitialWorldStates(
+                            session.character.read().await.clone().unwrap(),
+                        ))
+                        .await?;
+
+                    session.send_packet(ServerPacket::SendTimeSync(0)).await?;
+
+                    // session.cast_spell(836, true); // LOGINEFFECT
+                }
+
+                // set char status online
+                // set login status online
+
+                info!(
+                    "account {} logged in with character {name} ({})",
+                    "arlyon", "127.0.0.1"
+                );
+
+                Ok(())
             }
             ClientPacket::CharacterDelete(id) => match self
                 .characters
@@ -252,6 +405,16 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                         .await
                 }
             },
+            ClientPacket::SetActiveVoiceChannel(_) => Ok(()), // todo(arlyon): implement
+            ClientPacket::NameQuery(id) => match self.characters.get(id.try_into()?).await {
+                Ok(_) => todo!(),
+                Err(_) => todo!(),
+            },
+            ClientPacket::UpdateAccountData(d) => {
+                // todo(arlyon): update
+                warn!("received account data update");
+                Ok(())
+            }
         }
     }
 
