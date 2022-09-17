@@ -29,7 +29,8 @@ use tokio_stream::{
     iter,
     wrappers::{IntervalStream, TcpListenerStream},
 };
-use tracing::{debug, error, info, instrument, trace, warn};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, instrument, trace, warn, Id, Level, Span};
 
 use crate::{
     protocol::{
@@ -77,15 +78,27 @@ pub enum RequestState {
 pub struct AuthServer<T: AccountService + fmt::Debug, R: RealmList> {
     accounts: T,
     realms: R,
-    heartbeat: RwLock<HashMap<u8, Instant>>,
+    heartbeat: Arc<RwLock<HashMap<u8, Instant>>>,
 }
 
-impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
+impl<T: Clone + AccountService + fmt::Debug, R: Clone + RealmList> Clone for AuthServer<T, R> {
+    fn clone(&self) -> Self {
+        Self {
+            accounts: self.accounts.clone(),
+            realms: self.realms.clone(),
+            heartbeat: self.heartbeat.clone(),
+        }
+    }
+}
+
+impl<T: AccountService + fmt::Debug + Clone + 'static, R: RealmList + Clone + 'static>
+    AuthServer<T, R>
+{
     pub fn new(accounts: T, realms: R) -> Self {
         Self {
             accounts,
             realms,
-            heartbeat: RwLock::new(HashMap::new()),
+            heartbeat: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -118,6 +131,8 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         let instant = iter(iter::from_fn(|| Some(Instant::now())));
         let mut interval = IntervalStream::new(interval(time::Duration::from_secs(5))).zip(instant);
         while let Some((_, now)) = interval.next().await {
+            let span = tracing::span!(Level::TRACE, "update_realmlist");
+            let _guard = span.enter();
             let data = {
                 let mut write = self.heartbeat.write().await;
                 let mut data = Vec::with_capacity(write.len());
@@ -145,17 +160,32 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
         info!("listening on {:?}", &addr);
 
         let mut connections = TcpListenerStream::new(listener);
+        let id = Span::current().id().unwrap();
         while let Some(Ok(mut stream)) = connections.next().await {
-            if let Err(e) = self.connect_loop(&mut stream).await {
-                error!("error handling request: {e}")
-            }
+            tokio::task::Builder::new()
+                .name(&format!(
+                    "auth::connect[{}]",
+                    stream
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "unknown".to_string())
+                ))
+                .spawn({
+                    let server = self.to_owned();
+                    let id = id.clone();
+                    async move {
+                        if let Err(e) = server.connect_loop(&mut stream, id).await {
+                            error!("error handling request: {e}")
+                        }
+                    }
+                })?;
         }
 
         Ok(())
     }
 
     #[instrument(skip(self, stream))]
-    async fn connect_loop(&self, stream: &mut TcpStream) -> Result<()> {
+    async fn connect_loop(&self, stream: &mut TcpStream, id: Id) -> Result<()> {
         let mut state = RequestState::Start;
 
         loop {
@@ -198,11 +228,17 @@ impl<T: AccountService + fmt::Debug, R: RealmList> AuthServer<T, R> {
 }
 
 impl<
-        T: 'static + AccountService + fmt::Debug + Send + Sync,
-        R: 'static + RealmList + Send + Sync,
+        T: 'static + AccountService + fmt::Debug + Send + Sync + Clone,
+        R: 'static + RealmList + Send + Sync + Clone,
     > AuthServer<T, R>
 {
-    pub async fn start(self, host: Ipv4Addr, port: u16, heartbeat_port: u16) -> Result<()> {
+    pub async fn start(
+        self,
+        host: Ipv4Addr,
+        port: u16,
+        heartbeat_port: u16,
+        stop: CancellationToken,
+    ) -> Result<()> {
         let server = Arc::new(self);
 
         let a = flatten(tokio::task::Builder::new().name("auth::server").spawn({
@@ -213,7 +249,7 @@ impl<
                     .await
                     .context("server error")
             }
-        }));
+        })?);
         let b = flatten(tokio::task::Builder::new().name("auth::heartbeat").spawn({
             let server = server.clone();
             async move {
@@ -222,13 +258,18 @@ impl<
                     .await
                     .context("hearthbeat error")
             }
-        }));
+        })?);
         let c = flatten(tokio::task::Builder::new().name("auth::realmlist").spawn({
             let server = server.clone();
             async move { server.realmlist_updater().await.context("realmlist error") }
-        }));
+        })?);
 
-        try_join!(a, b, c)?;
+        let d = async {
+            stop.cancelled().await;
+            Result::<()>::Err(anyhow::anyhow!("cancelled"))
+        };
+
+        try_join!(a, b, c, d)?;
 
         Ok(())
     }

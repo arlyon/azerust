@@ -32,5 +32,5 @@ structopt = "0.3"
 tokio = {version = "1", features = ["macros", "tracing"]}
 tokio-stream = {version = "0.1.8", features = ["net", "time"]}
 tracing = "0.1"
-tracing-opentelemetry = "0.17.4"
-tracing-subscriber = "0.2"
+tracing-opentelemetry = "0.17"
+tracing-subscriber = "0.3"

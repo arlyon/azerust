@@ -246,31 +246,35 @@ impl<
         let server = Arc::new(self);
 
         try_join!(
-            flatten(tokio::task::Builder::new().name("world::heartbeat").spawn({
-                let cloned = server.clone();
-                async move {
-                    cloned
-                        .auth_server_heartbeat()
-                        .await
-                        .context("heartbeat error")
-                }
-            })),
+            flatten(
+                tokio::task::Builder::new()
+                    .name("world::heartbeat")
+                    .spawn({
+                        let cloned = server.clone();
+                        async move {
+                            cloned
+                                .auth_server_heartbeat()
+                                .await
+                                .context("heartbeat error")
+                        }
+                    })?
+            ),
             flatten(tokio::task::Builder::new().name("world::clients").spawn({
                 let cloned = server.clone();
                 async move { cloned.accept_clients().await.context("client error") }
-            })),
+            })?),
             flatten(tokio::task::Builder::new().name("world::update").spawn({
                 let cloned = server.clone();
                 async move { cloned.update().await.context("update error") }
-            })),
+            })?),
             flatten(tokio::task::Builder::new().name("world::packets").spawn({
                 let cloned = server.clone();
                 async move { cloned.world.handle_packets().await.context("packet error") }
-            })),
+            })?),
             flatten(tokio::task::Builder::new().name("world::timers").spawn({
                 let cloned = server.clone();
                 async move { cloned.world.timers().await.context("timer error") }
-            }))
+            })?)
         )?;
 
         Ok(())
@@ -320,11 +324,11 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
 
     let server_proof: [u8; 20] = {
         let mut sha = sha1::Sha1::new();
-        sha.update(&account.username.as_bytes());
-        sha.update(&[0u8; 4]);
-        sha.update(&auth_session.local_challenge);
+        sha.update(account.username.as_bytes());
+        sha.update([0u8; 4]);
+        sha.update(auth_session.local_challenge);
         sha.update(realm_seed);
-        sha.update(&session_key);
+        sha.update(session_key);
         sha.finalize().try_into().expect("sha1 hashes are 20 bytes")
     };
 
@@ -343,7 +347,7 @@ async fn handle_auth_session<A: AccountService, R: RealmList, C: CharacterServic
         Ok(s) => Ok(s),
         Err((e, writer)) => {
             error!("could not create WorldSession: {e}");
-            return Err((ResponseCode::AuthSystemError, writer));
+            Err((ResponseCode::AuthSystemError, writer))
         }
     }
 }

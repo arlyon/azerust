@@ -1,15 +1,15 @@
 [package]
-name = "azerust-graphql"
-version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
+name = "azerust-graphql"
+version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-graphql = {version = "3.0", features = ["chrono"] }
-sqlx = {version = "0.5", features = ["macros", "chrono"] }
+async-graphql = {version = "4", features = ["chrono"]}
 chrono = "0.4"
+sqlx = {version = "0.5", features = ["macros", "chrono"]}
 
 azerust-game = {path = "../game"}

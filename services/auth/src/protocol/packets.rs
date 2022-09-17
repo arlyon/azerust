@@ -74,7 +74,7 @@ impl Serialize for ConnectChallenge {
     {
         let len = if self.security_flags & 0x01 > 0 { 3 } else { 0 }
             + if self.security_flags & 0x02 > 0 { 5 } else { 0 }
-            + if self.security_flags & 0x04 > 0 { 1 } else { 0 };
+            + usize::from(self.security_flags & 0x04 > 0);
 
         let mut state = serializer.serialize_struct("packet", len)?;
         state.serialize_field("B", &self.b_pub)?;
@@ -126,7 +126,7 @@ pub struct ConnectProof {
 /// after verifying a ConnectProof request.
 #[repr(packed)]
 #[assert_eq_size([u8; 1 + 20 + 4 + 4 + 2])]
-#[derive(PartialEq, Debug, Serialize, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Serialize, Copy, Clone)]
 pub struct ConnectProofResponse {
     pub error: u8,
     pub server_proof: [u8; 20],

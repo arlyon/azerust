@@ -13,10 +13,7 @@ use azerust_game::{
 use azerust_protocol::world::{
     Addon, ClientPacket, Item, Position, RelationType, ResponseCode, ServerPacket, VerifyWorld,
 };
-use opentelemetry::{
-    trace::{SpanContext, TraceContextExt},
-    Context as OpentelemetryContext,
-};
+use opentelemetry::Context as OpentelemetryContext;
 use tokio::{
     join,
     net::tcp::OwnedWriteHalf,
@@ -259,7 +256,7 @@ impl<A: AccountService, R: RealmList, C: CharacterService> World<A, R, C> {
                     },
                 };
 
-                let _old_char = session.login(character).await?;
+                session.login(character).await?;
 
                 // verify world
                 {

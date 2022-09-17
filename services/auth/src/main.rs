@@ -28,6 +28,9 @@ use human_panic::setup_panic;
 use sqlx::MySqlPool;
 use structopt::StructOpt;
 use tokio::try_join;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info};
+use tracing_subscriber::{filter, prelude::*};
 
 use crate::{
     authserver::AuthServer,
@@ -46,13 +49,45 @@ async fn main() -> Result<()> {
 
     let opts = Opt::from_args();
     let config = AuthServerConfig::read(&opts.config).await?;
+
+    let tracer = opentelemetry_jaeger::new_pipeline()
+        .with_service_name("auth")
+        .install_simple()?;
+
+    let fmt_filter = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|log_filter| match log_filter.parse::<filter::Targets>() {
+            Ok(targets) => Some(targets),
+            Err(e) => {
+                eprintln!(
+                    "failed to parse filter environment variable `RUST_LOG={:?}`: {}",
+                    log_filter, e
+                );
+                None
+            }
+        })
+        .unwrap_or_else(|| {
+            "error"
+                .parse::<filter::Targets>()
+                .expect("`error` filter should always parse successfully")
+        });
+
     if let Some(port) = config.console_port {
-        console_subscriber::ConsoleLayer::builder()
-            .server_addr((config.bind_address, port))
+        tracing_subscriber::registry()
+            .with(
+                console_subscriber::ConsoleLayer::builder()
+                    .server_addr((config.bind_address, port))
+                    .spawn(),
+            )
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
             .init();
     } else {
-        tracing_subscriber::fmt::init();
-    }
+        tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
+            .init();
+    };
 
     match opts.command {
         Some(opt::OptCommand::Exec(c)) => match c {
@@ -83,8 +118,14 @@ async fn main() -> Result<()> {
             };
             auth.write(&opts.config).await?;
         }
-        None => start_server(config).await?,
+        None => match start_server(config).await {
+            Ok(_) => {}
+            Err(e) => error!("server shutting down: {}", e),
+        },
     };
+
+    info!("uploading spans");
+    opentelemetry::global::shutdown_tracer_provider(); // export remaining spans
 
     Ok(())
 }
@@ -106,6 +147,11 @@ async fn start_server(
 
     let server = AuthServer::new(accounts.clone(), realms.clone());
 
+    let cancel = CancellationToken::new();
+
+    let c2 = cancel.clone();
+    ctrlc_async::set_handler(move || c2.cancel())?;
+
     if let Some(api_port) = api_port {
         let addr = SocketAddr::new(bind_address.into(), api_port);
         let api = flatten(
@@ -115,12 +161,17 @@ async fn start_server(
                     api(&addr, accounts.clone(), realms.clone())
                         .await
                         .map_err(|_| anyhow!("failed to start graphql api"))
-                }),
+                })?,
         );
 
-        try_join!(server.start(bind_address, port, heartbeat_port), api)?;
+        try_join!(
+            server.start(bind_address, port, heartbeat_port, cancel),
+            api
+        )?;
     } else {
-        server.start(bind_address, port, heartbeat_port).await?;
+        server
+            .start(bind_address, port, heartbeat_port, cancel)
+            .await?;
     }
 
     Ok(())

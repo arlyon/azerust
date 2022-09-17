@@ -15,7 +15,7 @@ use thiserror::Error;
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
 /// An id for an account.
-#[derive(Debug, Display, PartialEq, Type, Clone, Copy)]
+#[derive(Debug, Display, PartialEq, Eq, Type, Clone, Copy)]
 #[sqlx(transparent)]
 pub struct AccountId(pub u32);
 

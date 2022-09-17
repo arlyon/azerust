@@ -39,7 +39,7 @@ lazy_static! {
 }
 
 /// A salt is used to prevent dictionary attacks,
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Type)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Type)]
 #[sqlx(transparent)]
 pub struct Salt(pub [u8; 32]);
 
@@ -53,7 +53,7 @@ impl Distribution<Salt> for Standard {
 /// A verifier allows the server to check the
 /// validity of a password proof provided to it
 /// by a client.
-#[derive(Copy, Clone, Debug, PartialEq, Type)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Type)]
 #[sqlx(transparent)]
 pub struct Verifier(pub [u8; 32]);
 
@@ -80,7 +80,7 @@ impl Verifier {
         let hash = BigUint::from_bytes_le(&hash.finalize());
 
         Self(
-            G.modpow(&hash, &*N)
+            G.modpow(&hash, &N)
                 .to_bytes_le()
                 .try_into()
                 .expect("correct size"),
@@ -221,11 +221,11 @@ impl WowSRPServer {
         let server_m = {
             let mut sha = Sha1::new();
             sha.update(&hn_xor_hg);
-            sha.update(&self.identity_hash);
-            sha.update(&self.salt.0);
+            sha.update(self.identity_hash);
+            sha.update(self.salt.0);
             sha.update(a_pub);
-            sha.update(&self.b_pub);
-            sha.update(&session_key);
+            sha.update(self.b_pub);
+            sha.update(session_key);
             sha.finalize()
         };
 

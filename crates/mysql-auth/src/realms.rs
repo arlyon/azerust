@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use azerust_game::realms::{Realm, RealmFlags, RealmId, RealmList, RealmListError};
 use sqlx::{query, query_as, MySqlPool};
 use tokio::sync::RwLock;
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace};
 
 #[derive(Clone)]
 pub struct MySQLRealmList {
@@ -31,6 +31,7 @@ impl MySQLRealmList {
 
 #[async_trait]
 impl RealmList for MySQLRealmList {
+    #[instrument(skip(self))]
     async fn realms(&self) -> Vec<Realm> {
         let now = SystemTime::now();
         if now > *self.next_update.read().await {
@@ -50,6 +51,7 @@ impl RealmList for MySQLRealmList {
         self.realms.read().await.clone()
     }
 
+    #[instrument(skip(self))]
     async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> Result<(), RealmListError> {
         for (id, flag) in online {
             query!(
@@ -61,6 +63,7 @@ impl RealmList for MySQLRealmList {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn set_uptime(
         &self,
         id: RealmId,

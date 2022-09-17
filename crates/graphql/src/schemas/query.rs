@@ -34,7 +34,7 @@ where
     async fn get_user(&self, ctx: &Context<'_>, username: String) -> FieldResult<Option<Account>> {
         let service = ctx.data::<A>()?;
         let account = service.get_by_username(&username).await?;
-        Ok(account.map(|a| Account(a)))
+        Ok(account.map(Account))
     }
 
     async fn get_realms(&self, ctx: &Context<'_>) -> FieldResult<Vec<Realm>> {

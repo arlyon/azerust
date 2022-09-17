@@ -9,7 +9,7 @@ use axum::{
     extract::Extension,
     response::{self, IntoResponse},
     routing::get,
-    AddExtensionLayer, Router, Server,
+    Router, Server,
 };
 use azerust_game::{accounts::AccountService, realms::RealmList};
 use azerust_graphql::{create_schema, Mutation, Query};
@@ -40,7 +40,7 @@ pub async fn api<
 
     let app = Router::new()
         .route("/", get(graphql_playground).post(graphql_handler::<T, R>))
-        .layer(AddExtensionLayer::new(schema));
+        .layer(Extension(schema));
 
     Server::bind(listen_addr)
         .serve(app.into_make_service())

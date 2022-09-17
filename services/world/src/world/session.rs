@@ -115,7 +115,7 @@ impl Session {
             }
             ServerPacket::AddonInfo(addons) => {
                 let addon_data = addons.iter().flat_map(|a| {
-                    let diff_pub: u8 = if a.crc != 0x4C1C776D { 1 } else { 0 };
+                    let diff_pub = u8::from(a.crc != 0x4C1C776D);
                     [2u8, 1u8, diff_pub, 0u8, 0u8, 0u8, 0u8, 0u8]
                 });
                 self.write_packet(

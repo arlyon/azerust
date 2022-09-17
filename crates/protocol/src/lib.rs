@@ -1,4 +1,3 @@
-use azerust_game::{realms::RealmId, WowId};
 use num_enum::IntoPrimitive;
 use serde::Serialize;
 

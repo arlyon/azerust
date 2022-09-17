@@ -38,3 +38,8 @@ services:
     volumes:
       - ./schema:/docker-entrypoint-initdb.d:Z
       - ./data:/var/lib/mysql:Z
+  jaeger:
+    image: "jaegertracing/all-in-one"
+    ports:
+      - "6831:6831/udp"
+      - "16686:16686"
