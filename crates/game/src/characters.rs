@@ -121,6 +121,7 @@ pub struct AccountDataCache {
 #[async_trait]
 pub trait CharacterService {
     async fn get(&self, id: CharacterId) -> Result<Character, CharacterServiceError>;
+    async fn list(&self) -> Result<Vec<Character>, CharacterServiceError>;
     async fn get_by_account(&self, id: AccountId) -> Result<Vec<Character>, CharacterServiceError>;
     async fn account_data(&self, id: AccountId) -> Result<AccountData, CharacterServiceError>;
     async fn count_by_account(&self, id: AccountId) -> Result<usize, CharacterServiceError>;

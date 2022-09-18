@@ -13,6 +13,7 @@ use rand::Rng;
 use sqlx::{query, query_as, MySqlPool};
 use tracing::{debug, instrument};
 
+#[derive(Clone)]
 pub struct MySQLCharacterService {
     pool: MySqlPool,
 }
@@ -146,5 +147,15 @@ impl CharacterService for MySQLCharacterService {
             per_char_layout: rows.remove(&6),
             per_char_chat: rows.remove(&7),
         })
+    }
+
+    async fn list(&self) -> Result<Vec<Character>, CharacterServiceError> {
+        query_as!(
+            Character,
+            "SELECT guid as 'id: _', account as 'account: _', name, level, race, class, gender, skin as skin_color, face, hairStyle as hair_style, hairColor as hair_color, facialStyle as facial_style, zone, map, position_x, position_y, position_z FROM characters",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CharacterServiceError::PersistError(e.to_string()))
     }
 }

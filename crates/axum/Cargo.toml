@@ -14,4 +14,6 @@ axum = "0.5"
 sqlx = "0.5"
 
 azerust-game = {path = "../game"}
-azerust-graphql = {path = "../graphql"}
+azerust-graphql-auth = {path = "../graphql-auth"}
+azerust-graphql-world = { version = "0.1.0", path = "../graphql-world" }
+anyhow = "1.0.65"

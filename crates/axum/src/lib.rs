@@ -1,3 +1,6 @@
+mod auth;
+mod world;
+
 use std::net::SocketAddr;
 
 use async_graphql::{
@@ -5,47 +8,16 @@ use async_graphql::{
     EmptySubscription, Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+pub use auth::auth_api;
 use axum::{
     extract::Extension,
     response::{self, IntoResponse},
     routing::get,
     Router, Server,
 };
-use azerust_game::{accounts::AccountService, realms::RealmList};
-use azerust_graphql::{create_schema, Mutation, Query};
-
-async fn graphql_handler<
-    A: 'static + AccountService + Send + Sync,
-    R: 'static + RealmList + Send + Sync,
->(
-    schema: Extension<Schema<Query<A, R>, Mutation<A>, EmptySubscription>>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
-    schema.execute(req.into_inner()).await.into()
-}
+use azerust_game::{accounts::AccountService, characters::CharacterService, realms::RealmList};
+pub use world::world_api;
 
 async fn graphql_playground() -> impl IntoResponse {
     response::Html(playground_source(GraphQLPlaygroundConfig::new("/")))
-}
-
-pub async fn api<
-    T: 'static + AccountService + Send + Sync,
-    R: 'static + RealmList + Send + Sync,
->(
-    listen_addr: &SocketAddr,
-    account: T,
-    realms: R,
-) -> Result<(), ()> {
-    let schema = create_schema(account, realms);
-
-    let app = Router::new()
-        .route("/", get(graphql_playground).post(graphql_handler::<T, R>))
-        .layer(Extension(schema));
-
-    Server::bind(listen_addr)
-        .serve(app.into_make_service())
-        .await
-        .map_err(|_| ())?;
-
-    Ok(())
 }

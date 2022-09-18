@@ -19,7 +19,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use azerust_axum::api;
+use azerust_axum::auth_api;
 use azerust_game::accounts::AccountService;
 use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
 use azerust_utils::flatten;
@@ -158,7 +158,7 @@ async fn start_server(
             tokio::task::Builder::new()
                 .name("auth::graphql")
                 .spawn(async move {
-                    api(&addr, accounts.clone(), realms.clone())
+                    auth_api(&addr, accounts.clone(), realms.clone())
                         .await
                         .map_err(|_| anyhow!("failed to start graphql api"))
                 })?,

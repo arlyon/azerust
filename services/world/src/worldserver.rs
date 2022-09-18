@@ -30,6 +30,7 @@ use tokio_stream::{
     wrappers::{IntervalStream, TcpListenerStream},
     StreamExt,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
@@ -242,7 +243,7 @@ impl<
     > WorldServer<A, R, C>
 {
     /// Start the world server, running the various tasks that it is comprised of
-    pub async fn start(self) -> Result<()> {
+    pub async fn start(self, cancel: CancellationToken) -> Result<()> {
         let server = Arc::new(self);
 
         try_join!(
@@ -274,7 +275,11 @@ impl<
             flatten(tokio::task::Builder::new().name("world::timers").spawn({
                 let cloned = server.clone();
                 async move { cloned.world.timers().await.context("timer error") }
-            })?)
+            })?),
+            async {
+                cancel.cancelled().await;
+                Result::<()>::Err(anyhow::anyhow!("cancelled"))
+            }
         )?;
 
         Ok(())

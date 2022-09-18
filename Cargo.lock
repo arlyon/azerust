@@ -340,11 +340,13 @@ dependencies = [
 name = "azerust-axum"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-graphql",
  "async-graphql-axum",
  "axum",
  "azerust-game",
- "azerust-graphql",
+ "azerust-graphql-auth",
+ "azerust-graphql-world",
  "sqlx",
 ]
 
@@ -368,7 +370,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "azerust-graphql"
+name = "azerust-graphql-auth"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "azerust-game",
+ "chrono",
+ "sqlx",
+]
+
+[[package]]
+name = "azerust-graphql-world"
 version = "0.1.0"
 dependencies = [
  "async-graphql",
@@ -434,6 +446,7 @@ name = "azerust-world"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "azerust-axum",
  "azerust-game",
  "azerust-mysql-auth",
  "azerust-mysql-characters",
@@ -441,12 +454,14 @@ dependencies = [
  "azerust-utils",
  "bincode",
  "console-subscriber",
+ "ctrlc-async",
  "derive_more",
  "flate2",
  "futures",
  "human-panic",
  "num_enum",
  "opentelemetry",
+ "opentelemetry-jaeger",
  "rand 0.8.5",
  "rust-crypto",
  "serde",
@@ -456,6 +471,7 @@ dependencies = [
  "structopt",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",

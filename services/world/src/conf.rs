@@ -9,6 +9,7 @@ pub struct WorldServerConfig {
     pub bind_address: Ipv4Addr,
     pub port: u32,
     pub console_port: Option<u16>,
+    pub api_port: Option<u16>,
 
     pub auth_server_address: String,
 
