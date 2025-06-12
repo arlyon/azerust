@@ -17,17 +17,12 @@
     clippy::unimplemented
 )]
 
-use serde::{Deserialize, Serialize};
-use sqlx::Type;
-
 pub mod accounts;
 pub mod characters;
 pub mod realms;
 pub mod types;
 
-#[derive(PartialEq, Debug, Eq, Clone, Copy, Type, Serialize, Deserialize)]
-#[sqlx(transparent)]
-pub struct WowId(u64);
+pub use wow_world_messages::Guid;
 
 #[derive(Debug, Clone, Copy)]
 pub enum EntityType {
@@ -45,8 +40,6 @@ pub enum EntityType {
     Instance = 0x1F42,
 }
 
-impl WowId {
-    pub fn new(r#type: EntityType, low: u32, mid: u32) -> Self {
-        Self((low as u64) | ((mid as u64) << 24) | ((r#type as u64) << 48))
-    }
+pub fn new_guid(r#type: EntityType, low: u32, mid: u32) -> Guid {
+    Guid::from((low as u64) | ((mid as u64) << 24) | ((r#type as u64) << 48))
 }

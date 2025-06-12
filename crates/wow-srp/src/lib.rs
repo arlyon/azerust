@@ -21,31 +21,28 @@ use std::convert::TryInto;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use rand::{
-    distributions::{Distribution, Standard},
     Rng,
+    distributions::{Distribution, Standard},
 };
 use serde::Serialize;
 use sha1::{Digest, Sha1};
-use sqlx::Type;
 use tracing::instrument;
 
 lazy_static! {
     static ref G: BigUint = BigUint::from_bytes_be(&[7]);
     static ref N: BigUint = BigUint::from_bytes_be(&[
-        0x89, 0x4B, 0x64, 0x5E, 0x89, 0xE1, 0x53, 0x5B, 0xBD, 0xAD, 0x5B, 0x8B, 0x29, 0x06, 0x50,
-        0x53, 0x08, 0x01, 0xB1, 0x8E, 0xBF, 0xBF, 0x5E, 0x8F, 0xAB, 0x3C, 0x82, 0x87, 0x2A, 0x3E,
-        0x9B, 0xB7,
+        0x89, 0x4B, 0x64, 0x5E, 0x89, 0xE1, 0x53, 0x5B, 0xBD, 0xAD, 0x5B, 0x8B, 0x29, 0x06, 0x50, 0x53, 0x08, 0x01, 0xB1, 0x8E, 0xBF, 0xBF, 0x5E, 0x8F, 0xAB,
+        0x3C, 0x82, 0x87, 0x2A, 0x3E, 0x9B, 0xB7,
     ]);
 }
 
 /// A salt is used to prevent dictionary attacks,
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Type)]
-#[sqlx(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Salt(pub [u8; 32]);
 
 impl Distribution<Salt> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Salt {
-        let inner = rng.gen();
+        let inner = rng.r#gen();
         Salt(inner)
     }
 }
@@ -53,8 +50,7 @@ impl Distribution<Salt> for Standard {
 /// A verifier allows the server to check the
 /// validity of a password proof provided to it
 /// by a client.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Type)]
-#[sqlx(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Verifier(pub [u8; 32]);
 
 impl From<&Verifier> for BigUint {
@@ -79,12 +75,7 @@ impl Verifier {
         hash.update(inner);
         let hash = BigUint::from_bytes_le(&hash.finalize());
 
-        Self(
-            G.modpow(&hash, &N)
-                .to_bytes_le()
-                .try_into()
-                .expect("correct size"),
-        )
+        Self(G.modpow(&hash, &N).to_bytes_le().try_into().expect("correct size"))
     }
 
     /// Create a verifier from raw bytes.
@@ -119,7 +110,7 @@ impl WowSRPServer {
     /// Create a new instance of a server verifier.
     pub fn new(username: &str, salt: Salt, verifier: Verifier) -> Self {
         let mut rng = rand::thread_rng();
-        let b = rng.gen();
+        let b = rng.r#gen();
         WowSRPServer::new_with_b(username, salt, verifier, b)
     }
 
@@ -127,9 +118,7 @@ impl WowSRPServer {
         Self {
             salt,
             b_pub: Self::calculate_b_pub(&b, &verifier),
-            identity_hash: Sha1::digest(username.as_bytes())
-                .try_into()
-                .expect("sha1 hashes are 20 bytes"),
+            identity_hash: Sha1::digest(username.as_bytes()).into(),
             verifier,
             b,
         }
@@ -159,33 +148,24 @@ impl WowSRPServer {
     /// a salt that can be stored in the database.
     pub fn register(username: &str, password: &str) -> (Verifier, Salt) {
         let mut rng = rand::thread_rng();
-        let salt = rng.gen();
+        let salt = rng.r#gen();
         (Verifier::from_credentials(username, password, &salt), salt)
     }
 
     /// Get the server proof (M2). This is derived from the client
     /// public key and client proof (M1), as well as the session key.
-    pub fn get_server_proof(
-        &self,
-        a_pub: &[u8; 32],
-        client_proof: &[u8; 20],
-        session_key: &[u8; 40],
-    ) -> [u8; 20] {
+    pub fn get_server_proof(&self, a_pub: &[u8; 32], client_proof: &[u8; 20], session_key: &[u8; 40]) -> [u8; 20] {
         let mut sha = Sha1::new();
         sha.update(a_pub);
         sha.update(client_proof);
         sha.update(session_key);
-        sha.finalize().try_into().expect("sha1 hashes are 20 bytes")
+        sha.finalize().into()
     }
 
     /// Verify the challenge response, returning a verified key if
     /// it is valid.
     #[instrument]
-    pub fn verify_challenge_response(
-        self,
-        a_pub: &[u8; 32],
-        client_m: &[u8; 20],
-    ) -> Option<[u8; 40]> {
+    pub fn verify_challenge_response(self, a_pub: &[u8; 32], client_m: &[u8; 20]) -> Option<[u8; 40]> {
         let a_pub_num = BigUint::from_bytes_le(a_pub);
         let verifier = BigUint::from(&self.verifier);
         let b = BigUint::from_bytes_be(&self.b);
@@ -205,12 +185,7 @@ impl WowSRPServer {
         let premaster_secret = (&a_pub_num * verifier.modpow(&u, &N)).modpow(&b, &N);
 
         // todo(arlyon): this can panic
-        let session_key = WowSRPServer::derive_session_key(
-            &premaster_secret
-                .to_bytes_le()
-                .try_into()
-                .expect("correct size"),
-        );
+        let session_key = WowSRPServer::derive_session_key(&premaster_secret.to_bytes_le().try_into().expect("correct size"));
 
         let hn_xor_hg: Vec<_> = Sha1::digest(&N.to_bytes_le())
             .iter()
@@ -229,11 +204,7 @@ impl WowSRPServer {
             sha.finalize()
         };
 
-        if server_m.as_slice() == client_m {
-            Some(session_key)
-        } else {
-            None
-        }
+        if server_m.as_slice() == client_m { Some(session_key) } else { None }
     }
 
     /// Calculate the server's public key from a combination of the private key
@@ -242,10 +213,7 @@ impl WowSRPServer {
         let fst = G.modpow(&BigUint::from_bytes_be(b), &N);
         let snd = BigUint::from(v) * BigUint::from(3u8);
 
-        ((fst + snd) % &*N)
-            .to_bytes_le()
-            .try_into()
-            .expect("correct size")
+        ((fst + snd) % &*N).to_bytes_le().try_into().expect("correct size")
     }
 
     /// Calculates the session key by running it through a SHA1 interleave.
@@ -260,7 +228,7 @@ impl WowSRPServer {
         let start = premaster_secret
             .iter()
             .enumerate()
-            .find(|(_, &v)| v != 0)
+            .find(|&(_, &v)| v != 0)
             .map(|(i, &v)| if v == 0 { i } else { i + 1 })
             .unwrap_or(premaster_secret.len())
             / 2;
@@ -284,16 +252,14 @@ mod test {
     #[test]
     pub fn test_session_key_derivation() {
         let s: [u8; 32] = [
-            19, 10, 81, 2, 224, 175, 69, 69, 84, 172, 123, 122, 83, 70, 70, 11, 104, 26, 227, 161,
-            13, 124, 152, 156, 116, 130, 69, 161, 134, 49, 47, 87,
+            19, 10, 81, 2, 224, 175, 69, 69, 84, 172, 123, 122, 83, 70, 70, 11, 104, 26, 227, 161, 13, 124, 152, 156, 116, 130, 69, 161, 134, 49, 47, 87,
         ];
 
         let k = WowSRPServer::derive_session_key(&s);
 
         let k_expected: [u8; 40] = [
-            250, 249, 162, 120, 246, 212, 243, 32, 54, 127, 15, 13, 84, 137, 96, 197, 162, 197, 95,
-            221, 107, 218, 252, 23, 37, 95, 250, 83, 182, 53, 105, 254, 23, 14, 207, 191, 85, 207,
-            209, 111,
+            250, 249, 162, 120, 246, 212, 243, 32, 54, 127, 15, 13, 84, 137, 96, 197, 162, 197, 95, 221, 107, 218, 252, 23, 37, 95, 250, 83, 182, 53, 105, 254,
+            23, 14, 207, 191, 85, 207, 209, 111,
         ];
 
         assert_eq!(k, k_expected);
@@ -302,29 +268,22 @@ mod test {
     #[test]
     pub fn test_challenge_response() {
         let a_pub: [u8; 32] = [
-            177, 187, 117, 101, 30, 135, 85, 86, 180, 130, 85, 39, 48, 20, 11, 106, 214, 92, 84,
-            103, 232, 177, 228, 146, 224, 172, 207, 133, 107, 59, 208, 18,
+            177, 187, 117, 101, 30, 135, 85, 86, 180, 130, 85, 39, 48, 20, 11, 106, 214, 92, 84, 103, 232, 177, 228, 146, 224, 172, 207, 133, 107, 59, 208, 18,
         ];
 
-        let client_m: [u8; 20] = [
-            146, 204, 135, 140, 185, 242, 195, 134, 82, 178, 161, 241, 103, 186, 206, 104, 255,
-            211, 141, 6,
-        ];
+        let client_m: [u8; 20] = [146, 204, 135, 140, 185, 242, 195, 134, 82, 178, 161, 241, 103, 186, 206, 104, 255, 211, 141, 6];
 
         let server = WowSRPServer::new_with_b(
             "ARLYON",
             Salt([
-                224, 222, 178, 127, 204, 184, 244, 126, 70, 90, 69, 35, 84, 22, 9, 131, 253, 198,
-                54, 56, 240, 56, 90, 214, 234, 20, 89, 54, 177, 3, 71, 245,
+                224, 222, 178, 127, 204, 184, 244, 126, 70, 90, 69, 35, 84, 22, 9, 131, 253, 198, 54, 56, 240, 56, 90, 214, 234, 20, 89, 54, 177, 3, 71, 245,
             ]),
             Verifier::from_raw([
-                83, 39, 153, 164, 62, 235, 129, 78, 56, 219, 154, 148, 34, 246, 103, 86, 198, 149,
-                125, 69, 184, 96, 172, 156, 203, 86, 185, 27, 161, 55, 61, 8,
+                83, 39, 153, 164, 62, 235, 129, 78, 56, 219, 154, 148, 34, 246, 103, 86, 198, 149, 125, 69, 184, 96, 172, 156, 203, 86, 185, 27, 161, 55, 61, 8,
             ]),
             [
-                0xF0, 0xA4, 0xBB, 0x60, 0x1C, 0xB3, 0xE5, 0x03, 0x41, 0x26, 0xD0, 0xC7, 0x95, 0x73,
-                0x19, 0xD3, 0xCB, 0x0D, 0x7B, 0xD6, 0xFE, 0x2E, 0x3C, 0x9F, 0x6F, 0x0C, 0x27, 0x28,
-                0x17, 0x55, 0x76, 0x1F,
+                0xF0, 0xA4, 0xBB, 0x60, 0x1C, 0xB3, 0xE5, 0x03, 0x41, 0x26, 0xD0, 0xC7, 0x95, 0x73, 0x19, 0xD3, 0xCB, 0x0D, 0x7B, 0xD6, 0xFE, 0x2E, 0x3C, 0x9F,
+                0x6F, 0x0C, 0x27, 0x28, 0x17, 0x55, 0x76, 0x1F,
             ],
         );
 
@@ -334,18 +293,15 @@ mod test {
     #[test]
     pub fn test_calculate_b_pub() {
         let b_pub = [
-            207, 248, 81, 226, 241, 107, 212, 253, 104, 21, 206, 66, 202, 67, 72, 65, 242, 27, 42,
-            111, 204, 187, 209, 246, 130, 204, 13, 78, 184, 205, 74, 56,
+            207, 248, 81, 226, 241, 107, 212, 253, 104, 21, 206, 66, 202, 67, 72, 65, 242, 27, 42, 111, 204, 187, 209, 246, 130, 204, 13, 78, 184, 205, 74, 56,
         ];
 
         let b = [
-            240, 164, 187, 96, 28, 179, 229, 3, 65, 38, 208, 199, 149, 115, 25, 211, 203, 13, 123,
-            214, 254, 46, 60, 159, 111, 12, 39, 40, 23, 85, 118, 31,
+            240, 164, 187, 96, 28, 179, 229, 3, 65, 38, 208, 199, 149, 115, 25, 211, 203, 13, 123, 214, 254, 46, 60, 159, 111, 12, 39, 40, 23, 85, 118, 31,
         ];
 
         let v = Verifier::from_raw([
-            110, 114, 108, 105, 100, 115, 110, 114, 100, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            110, 114, 108, 105, 100, 115, 110, 114, 100, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ]);
 
         assert_eq!(WowSRPServer::calculate_b_pub(&b, &v), b_pub)
@@ -354,13 +310,11 @@ mod test {
     #[test]
     pub fn verifier_from_credentials() {
         let salt: [u8; 32] = [
-            187, 90, 185, 129, 207, 201, 1, 39, 118, 43, 185, 47, 102, 19, 75, 54, 17, 102, 255,
-            182, 144, 248, 239, 202, 238, 158, 71, 164, 216, 195, 53, 226,
+            187, 90, 185, 129, 207, 201, 1, 39, 118, 43, 185, 47, 102, 19, 75, 54, 17, 102, 255, 182, 144, 248, 239, 202, 238, 158, 71, 164, 216, 195, 53, 226,
         ];
 
         let v_expected: [u8; 32] = [
-            44, 42, 171, 164, 129, 208, 59, 156, 50, 148, 246, 223, 12, 222, 85, 21, 129, 251, 36,
-            170, 7, 130, 79, 109, 238, 227, 72, 88, 196, 33, 67, 90,
+            44, 42, 171, 164, 129, 208, 59, 156, 50, 148, 246, 223, 12, 222, 85, 21, 129, 251, 36, 170, 7, 130, 79, 109, 238, 227, 72, 88, 196, 33, 67, 90,
         ];
 
         let v = Verifier::from_credentials("ARLYON", "TEST", &Salt(salt));

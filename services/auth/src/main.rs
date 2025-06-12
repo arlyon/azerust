@@ -1,4 +1,4 @@
-#![feature(hash_drain_filter, arbitrary_enum_discriminant)]
+#![feature(hash_extract_if)]
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
@@ -18,14 +18,14 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use azerust_axum::auth_api;
 use azerust_game::accounts::AccountService;
-use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
+use azerust_pg_auth::{PgAccountService, PgRealmList};
 use azerust_utils::flatten;
 use conf::AuthServerConfig;
+use deadpool_postgres::{Runtime, tokio_postgres::NoTls};
 use human_panic::setup_panic;
-use sqlx::MySqlPool;
 use structopt::StructOpt;
 use tokio::try_join;
 use tokio_util::sync::CancellationToken;
@@ -40,8 +40,6 @@ use crate::{
 mod authserver;
 mod conf;
 mod opt;
-mod protocol;
-mod wow_bincode;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -50,41 +48,30 @@ async fn main() -> Result<()> {
     let opts = Opt::from_args();
     let config = AuthServerConfig::read(&opts.config).await?;
 
-    let tracer = opentelemetry_jaeger::new_pipeline()
-        .with_service_name("auth")
-        .install_simple()?;
+    // let tracer = opentelemetry_jaeger::new_pipeline()
+    //     .with_service_name("auth")
+    //     .install_simple()?;
 
     let fmt_filter = std::env::var("RUST_LOG")
         .ok()
         .and_then(|log_filter| match log_filter.parse::<filter::Targets>() {
             Ok(targets) => Some(targets),
             Err(e) => {
-                eprintln!(
-                    "failed to parse filter environment variable `RUST_LOG={:?}`: {}",
-                    log_filter, e
-                );
+                eprintln!("failed to parse filter environment variable `RUST_LOG={:?}`: {}", log_filter, e);
                 None
             }
         })
-        .unwrap_or_else(|| {
-            "error"
-                .parse::<filter::Targets>()
-                .expect("`error` filter should always parse successfully")
-        });
+        .unwrap_or_else(|| "error".parse::<filter::Targets>().expect("`error` filter should always parse successfully"));
 
-    if let Some(port) = config.console_port {
+    if let Some(_port) = config.console_port {
         tracing_subscriber::registry()
-            .with(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr((config.bind_address, port))
-                    .spawn(),
-            )
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            // .with(console_subscriber::ConsoleLayer::builder().server_addr((config.bind_address, port)).spawn())
+            // .with(tracing_opentelemetry::layer().with_tracer(tracer))
             .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
             .init();
     } else {
         tracing_subscriber::registry()
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            // .with(tracing_opentelemetry::layer().with_tracer(tracer))
             .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
             .init();
     };
@@ -92,15 +79,13 @@ async fn main() -> Result<()> {
     match opts.command {
         Some(opt::OptCommand::Exec(c)) => match c {
             opt::Command::Account {
-                command:
-                    AccountCommand::Create {
-                        username,
-                        password,
-                        email,
-                    },
+                command: AccountCommand::Create { username, password, email },
             } => {
-                let pool = MySqlPool::connect(&config.auth_database).await?;
-                let accounts = MySQLAccountService::new(pool);
+                let mut pool_cfg = deadpool_postgres::Config::new();
+                pool_cfg.url = Some(config.auth_database);
+                pool_cfg.connect_timeout = Some(Duration::from_secs(1));
+                let pool = pool_cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+                let accounts = PgAccountService::new(pool);
                 match accounts.create_account(&username, &password, &email).await {
                     Ok(id) => println!("created account {id}"),
                     Err(e) => eprintln!("failed to create account: {e}"),
@@ -140,10 +125,13 @@ async fn start_server(
         ..
     }: AuthServerConfig,
 ) -> Result<()> {
-    let pool = MySqlPool::connect(&auth_database).await?;
+    let mut pool_cfg = deadpool_postgres::Config::new();
+    pool_cfg.url = Some(auth_database.clone());
+    pool_cfg.connect_timeout = Some(Duration::from_secs(3));
+    let pool = pool_cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
 
-    let accounts = MySQLAccountService::new(pool.clone());
-    let realms = MySQLRealmList::new(pool.clone(), Duration::from_secs(10));
+    let accounts = PgAccountService::new(pool.clone());
+    let realms = PgRealmList::new(pool.clone(), Duration::from_secs(10));
 
     let server = AuthServer::new(accounts.clone(), realms.clone());
 
@@ -154,24 +142,15 @@ async fn start_server(
 
     if let Some(api_port) = api_port {
         let addr = SocketAddr::new(bind_address.into(), api_port);
-        let api = flatten(
-            tokio::task::Builder::new()
-                .name("auth::graphql")
-                .spawn(async move {
-                    auth_api(&addr, accounts.clone(), realms.clone())
-                        .await
-                        .map_err(|_| anyhow!("failed to start graphql api"))
-                })?,
-        );
+        let api = flatten(tokio::task::Builder::new().name("auth::graphql").spawn(async move {
+            auth_api(&addr, accounts.clone(), realms.clone())
+                .await
+                .map_err(|_| anyhow!("failed to start graphql api"))
+        })?);
 
-        try_join!(
-            server.start(bind_address, port, heartbeat_port, cancel),
-            api
-        )?;
+        try_join!(server.start(bind_address, port, heartbeat_port, cancel), api)?;
     } else {
-        server
-            .start(bind_address, port, heartbeat_port, cancel)
-            .await?;
+        server.start(bind_address, port, heartbeat_port, cancel).await?;
     }
 
     Ok(())

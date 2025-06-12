@@ -14,8 +14,8 @@ impl Realm {
     async fn build(&self) -> u32 {
         self.0.build
     }
-    async fn ip(&self) -> &str {
-        &self.0.external_address
+    async fn ip(&self) -> String {
+        self.0.external_address.to_string()
     }
     async fn port(&self) -> u16 {
         self.0.port

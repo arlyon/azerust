@@ -3,20 +3,18 @@
 //! The accounts module handles the basic manipulation
 //! of accounts such as login and creation / deletion.
 
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use derive_more::Display;
 use rand::Rng;
 use sha1::Digest;
-use sqlx::Type;
 use thiserror::Error;
+use time::PrimitiveDateTime;
+use wow_login_messages::version_8::CMD_AUTH_LOGON_CHALLENGE_Server;
 use wow_srp::{Salt, Verifier, WowSRPServer};
 
 /// An id for an account.
-#[derive(Debug, Display, PartialEq, Eq, Type, Clone, Copy)]
-#[sqlx(transparent)]
+#[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct AccountId(pub u32);
 
 /// A basic account object.
@@ -31,13 +29,13 @@ pub struct Account {
     pub verifier: Verifier,
     pub session_key: Option<[u8; 40]>,
 
-    pub joindate: DateTime<Utc>,
-    pub last_login: Option<DateTime<Utc>>,
-    pub online: u8,
+    pub joindate: PrimitiveDateTime,
+    pub last_login: Option<PrimitiveDateTime>,
+    pub online: bool,
 }
 
 /// Models the status of someone's ban.
-#[derive(PartialEq, Eq, Debug, Type, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum BanStatus {
     Temporary,
@@ -85,20 +83,10 @@ impl ConnectToken {
     }
 
     /// Handle the keys for the public key and proof.
-    pub fn accept(
-        &self,
-        public_key: &[u8; 32],
-        client_proof: &[u8; 20],
-    ) -> Result<([u8; 20], [u8; 40]), LoginFailure> {
+    pub fn accept(&self, public_key: &[u8; 32], client_proof: &[u8; 20]) -> Result<([u8; 20], [u8; 40]), LoginFailure> {
         self.server
             .verify_challenge_response(public_key, client_proof)
-            .map(|session_key| {
-                (
-                    self.server
-                        .get_server_proof(public_key, client_proof, &session_key),
-                    session_key,
-                )
-            })
+            .map(|session_key| (self.server.get_server_proof(public_key, client_proof, &session_key), session_key))
             .ok_or(LoginFailure::IncorrectPassword)
     }
 }
@@ -113,17 +101,13 @@ pub struct ReconnectToken {
 impl ReconnectToken {
     pub fn new(account: Account, session_key: [u8; 40]) -> Self {
         Self {
-            reconnect_proof: rand::thread_rng().gen(),
+            reconnect_proof: rand::thread_rng().r#gen(),
             account,
             session_key,
         }
     }
 
-    pub fn accept(
-        &self,
-        proof_data: &[u8; 16],
-        client_proof: &[u8; 20],
-    ) -> Result<(), LoginFailure> {
+    pub fn accept(&self, proof_data: &[u8; 16], client_proof: &[u8; 20]) -> Result<(), LoginFailure> {
         let mut sha = sha1::Sha1::new();
         sha.update(&self.account.username);
         sha.update(proof_data);
@@ -140,55 +124,45 @@ impl ReconnectToken {
 }
 
 /// An account service handles all the business logic for accounts.
-#[async_trait]
 pub trait AccountService: Send + Sync {
-    async fn list_account(&self) -> Result<Vec<Account>, AccountFetchError>;
+    fn list_account(&self) -> impl Future<Output = Result<Vec<Account>, AccountFetchError>> + Send;
 
     /// Creates a new account in the system.
-    async fn create_account(
-        &self,
-        username: &str,
-        password: &str,
-        email: &str,
-    ) -> Result<AccountId, AccountOpError>;
+    fn create_account(&self, username: &str, password: &str, email: &str) -> impl Future<Output = Result<AccountId, AccountOpError>> + Send;
 
     /// Deletes an account from the system along with all associated
     /// information and characters.
-    async fn delete_account(&self, id: AccountId) -> Result<(), AccountOpError>;
+    fn delete_account(&self, id: AccountId) -> impl Future<Output = Result<(), AccountOpError>> + Send;
 
-    async fn get(&self, id: AccountId) -> Result<Account, AccountOpError>;
+    fn get(&self, id: AccountId) -> impl Future<Output = Result<Account, AccountOpError>> + Send;
 
     /// Gets an account from the system by its username.
-    async fn get_by_username(&self, username: &str) -> Result<Option<Account>, AccountOpError>;
+    fn get_by_username(&self, username: &str) -> impl Future<Output = Result<Option<Account>, AccountOpError>> + Send;
 
     /// Start a login in the system. This function returns a LoginVerifier
     /// which can be used to handle the second stage of the login.
-    async fn initiate_login(&self, username: &str) -> Result<ConnectToken, LoginFailure>;
+    fn initiate_login(&self, username: &str) -> impl Future<Output = Result<ConnectToken, LoginFailure>> + Send;
 
     /// Logs the user in with the given public key and proof.
-    async fn complete_login(
+    fn complete_login(
         &self,
+        username: String,
         token: &ConnectToken,
         public_key: &[u8; 32],
         proof: &[u8; 20],
-    ) -> Result<[u8; 20], LoginFailure>;
+    ) -> impl Future<Output = Result<[u8; 20], LoginFailure>> + Send;
 
-    async fn initiate_relogin(&self, username: &str) -> Result<ReconnectToken, LoginFailure>;
+    fn initiate_relogin(&self, username: &str) -> impl Future<Output = Result<ReconnectToken, LoginFailure>> + Send;
 
-    async fn complete_relogin(
+    fn complete_relogin(
         &self,
         token: &ReconnectToken,
         proof_data: &[u8; 16],
         client_proof: &[u8; 20],
-    ) -> Result<[u8; 20], LoginFailure>;
+    ) -> impl Future<Output = Result<[u8; 20], LoginFailure>> + Send;
 
-    async fn set_ban(
-        &self,
-        id: AccountId,
-        author: &str,
-        duration: Option<Duration>,
-        reason: Option<&str>,
-    ) -> Result<(), AccountOpError>;
+    fn set_ban(&self, id: AccountId, author: &str, duration: Option<Duration>, reason: Option<&str>)
+    -> impl Future<Output = Result<(), AccountOpError>> + Send;
 }
 
 /// Errors that may occur when running account operations.
@@ -214,4 +188,16 @@ pub enum LoginFailure {
     UnknownAccount,
     IncorrectPassword,
     DatabaseError,
+}
+
+impl From<LoginFailure> for CMD_AUTH_LOGON_CHALLENGE_Server {
+    fn from(value: LoginFailure) -> Self {
+        match value {
+            LoginFailure::Suspended => CMD_AUTH_LOGON_CHALLENGE_Server::FailSuspended,
+            LoginFailure::Banned => CMD_AUTH_LOGON_CHALLENGE_Server::FailBanned,
+            LoginFailure::UnknownAccount => CMD_AUTH_LOGON_CHALLENGE_Server::FailUnknownAccount,
+            LoginFailure::IncorrectPassword => CMD_AUTH_LOGON_CHALLENGE_Server::FailIncorrectPassword,
+            LoginFailure::DatabaseError => CMD_AUTH_LOGON_CHALLENGE_Server::FailDbBusy,
+        }
+    }
 }

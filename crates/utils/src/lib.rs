@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use tokio::task::JoinHandle;
 
 pub async fn flatten<T>(handle: JoinHandle<Result<T>>) -> Result<T> {

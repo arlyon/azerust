@@ -1,40 +1,42 @@
 [package]
 authors = ["Alexander Lyon <arlyon@me.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "azerust-world"
 version = "0.1.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1"
 azerust-axum = { version = "0.1.0", path = "../../crates/axum" }
-azerust-game = {path = "../../crates/game"}
-azerust-mysql-auth = {path = "../../crates/mysql-auth"}
-azerust-mysql-characters = {path = "../../crates/mysql-characters"}
-azerust-protocol = {path = "../../crates/protocol", features = ["world"]}
-azerust-utils = {path = "../../crates/utils"}
+azerust-game = { path = "../../crates/game" }
+azerust-pg-auth = { path = "../../crates/pg-auth" }
+azerust-pg-characters = { path = "../../crates/pg-characters" }
+azerust-utils = { path = "../../crates/utils" }
+bevy = { version = "0.15.0", default-features = false }
 bincode = "2.0.0-dev"
-console-subscriber = "0.1.1"
+# console-subscriber = "0.1.1"
 ctrlc-async = "3.2.2"
+deadpool-postgres = "0.12.0"
 derive_more = "0.99.16"
 flate2 = "1.0.22"
 futures = "0.3.17"
-human-panic = "1"
+generic-global-variables = "0.1.2"
+human-panic = "2"
 num_enum = "0.5.4"
 opentelemetry = "0.17.0"
-opentelemetry-jaeger = {version = "0.16.0", features = ["rt-tokio"]}
+opentelemetry-jaeger = { version = "0.16.0", features = ["rt-tokio"] }
 rand = "0.8.4"
 rust-crypto = "0.2"
 serde = "1"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 sha-1 = "0.9"
-sqlx = {version = "0.5", features = ["runtime-tokio-rustls", "chrono", "offline"]}
 structopt = "0.3"
-tokio = {version = "1", features = ["macros", "tracing"]}
-tokio-stream = {version = "0.1.8", features = ["net", "time"]}
+time = "0.3.36"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "tracing"] }
+tokio-stream = { version = "0.1.8", features = ["net", "time"] }
 tokio-util = "0.7.4"
 tracing = "0.1"
 tracing-opentelemetry = "0.17"
 tracing-subscriber = "0.3"
+wow_srp = "0.7"
+wow_world_messages = { version = "0.3.0", features = ["tokio", "wrath"] }

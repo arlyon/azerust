@@ -6,12 +6,13 @@ pub struct ClientId(pub u64);
 
 impl Distribution<ClientId> for Standard {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ClientId {
-        ClientId(rng.gen())
+        ClientId(rng.r#gen())
     }
 }
 
 /// contains identifying information about a connected client
 #[derive(Copy, Clone)]
+#[allow(unused)]
 pub struct Client {
     pub id: ClientId,
     pub account: Option<AccountId>,

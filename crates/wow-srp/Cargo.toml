@@ -2,7 +2,7 @@
 name = "wow-srp"
 version = "0.1.0"
 authors = ["Alexander Lyon <arlyon@me.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
@@ -11,5 +11,4 @@ num-bigint = "0.4"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 sha-1 = "0.9"
-sqlx = "0.5"
 tracing = "0.1"

@@ -1,0 +1,22 @@
+[package]
+name = "azerust-pg-characters"
+version = "0.1.0"
+authors = ["Alexander Lyon <arlyon@me.com>"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+tracing = "0.1"
+async-trait = "0.1"
+wow-srp = { path = "../wow-srp" }
+azerust-game = { path = "../game" }
+lazy_static = "1.4"
+rand = "0.8"
+sha-1 = "0.9"
+tokio = "1"
+cornucopia_async = "0.6.0"
+tokio-postgres = { version = "0.7.12", features = ["with-time-0_3"] }
+deadpool-postgres = "0.12.0"
+postgres-types = "0.2.8"
+time = "0.3.36"
+futures = "0.3.31"

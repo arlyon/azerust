@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, io::BufRead, path::PathBuf};
+use std::{ffi::OsStr, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 use mpq::Archive;
@@ -52,11 +52,7 @@ fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
 
     match opts.command {
-        Command::List {
-            paths,
-            exclude,
-            include,
-        } => {
+        Command::List { paths, exclude: _, include } => {
             for path in paths {
                 let mut header_written = false;
 
@@ -92,15 +88,15 @@ fn main() -> anyhow::Result<()> {
         Command::Extract {
             paths,
             dest,
-            exclude,
+            exclude: _,
             include,
         } => {
             paths
                 .par_iter()
                 .map(|path| {
-                    let mut header_written = false;
+                    // let header_written = false;
 
-                    let mut a = Archive::open(&path)?;
+                    let mut a = Archive::open(path)?;
 
                     let buf = {
                         let file = a.open_file("(listfile)")?;
@@ -123,12 +119,13 @@ fn main() -> anyhow::Result<()> {
                     {
                         println!("extracting {}", file_name);
                         let file = a.open_file(file_name)?;
-                        file.extract(&mut a, &dest.join(file_name.replace("\\", "/")));
+                        file.extract(&mut a, dest.join(file_name.replace("\\", "/"))).unwrap();
                     }
 
                     Ok(())
                 })
-                .collect::<anyhow::Result<Vec<_>>>();
+                .collect::<anyhow::Result<Vec<_>>>()
+                .unwrap();
         }
     }
 

@@ -1,3 +1,5 @@
+CREATE EXTENSION uint;
+
 -- Table: account
 CREATE TABLE account (
     id SERIAL PRIMARY KEY,
@@ -12,27 +14,27 @@ CREATE TABLE account (
     joindate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_ip INET NOT NULL DEFAULT '127.0.0.1',
     last_attempt_ip INET NOT NULL DEFAULT '127.0.0.1',
-    failed_logins INT NOT NULL DEFAULT 0,
+    failed_logins uint4 NOT NULL DEFAULT 0,
     locked BOOLEAN NOT NULL DEFAULT FALSE,
     lock_country VARCHAR(2) NOT NULL DEFAULT '00',
     last_login TIMESTAMP NULL,
     online BOOLEAN NOT NULL DEFAULT FALSE,
-    expansion SMALLINT NOT NULL DEFAULT 2,
-    mutetime BIGINT NOT NULL DEFAULT 0 CHECK (mutetime >= 0),
+    expansion uint1 NOT NULL DEFAULT 2,
+    mutetime uint8 NOT NULL DEFAULT 0,
     mutereason VARCHAR(255) NOT NULL DEFAULT '',
     muteby VARCHAR(50) NOT NULL DEFAULT '',
-    locale SMALLINT NOT NULL DEFAULT 0,
+    locale uint1 NOT NULL DEFAULT 0,
     os VARCHAR(3) NOT NULL DEFAULT '',
     timezone_offset SMALLINT NOT NULL DEFAULT 0,
-    recruiter INT NOT NULL DEFAULT 0
+    recruiter uint4 NOT NULL DEFAULT 0
 );
 
 COMMENT ON TABLE account IS 'Account information for authentication.';
 
 -- Table: account_access
 CREATE TABLE account_access (
-    account_id INT NOT NULL,
-    security_level SMALLINT NOT NULL CHECK (security_level >= 0),
+    account_id uint4 NOT NULL,
+    security_level uint1 NOT NULL,
     realm_id INT NOT NULL DEFAULT -1,
     comment VARCHAR(255),
     PRIMARY KEY (account_id, realm_id)
@@ -42,7 +44,7 @@ COMMENT ON TABLE account_access IS 'Access levels for accounts per realm.';
 
 -- Table: account_banned
 CREATE TABLE account_banned (
-    id INT NOT NULL,
+    id uint4 NOT NULL,
     bandate TIMESTAMP NOT NULL,
     unbandate TIMESTAMP NOT NULL,
     bannedby VARCHAR(50) NOT NULL,
@@ -57,7 +59,7 @@ COMMENT ON TABLE account_banned IS 'Ban records for accounts.';
 CREATE TABLE autobroadcast (
     realmid INT NOT NULL DEFAULT -1,
     id SERIAL PRIMARY KEY,
-    weight SMALLINT DEFAULT 1 CHECK (weight > 0),
+    weight uint1 DEFAULT 1,
     text TEXT NOT NULL
 );
 
@@ -89,10 +91,10 @@ COMMENT ON TABLE ip_banned IS 'Ban records for IP addresses.';
 
 -- Table: logs
 CREATE TABLE logs (
-    time BIGINT NOT NULL CHECK (time >= 0),
-    realm INT NOT NULL,
+    time uint4 NOT NULL,
+    realm uint4 NOT NULL,
     type VARCHAR(250) NOT NULL,
-    level SMALLINT NOT NULL DEFAULT 0,
+    level uint1 NOT NULL DEFAULT 0,
     message TEXT
 );
 
@@ -100,8 +102,9 @@ COMMENT ON TABLE logs IS 'Log records for events.';
 
 -- Table: rbac_account_permissions
 CREATE TABLE rbac_account_permissions (
-    account_id INT NOT NULL,
-    permission_id INT NOT NULL,
+    account_id uint4 NOT NULL,
+    permission_id uint4 NOT NULL,
+    test uint8,
     granted BOOLEAN NOT NULL DEFAULT TRUE,
     realm_id INT NOT NULL DEFAULT -1,
     PRIMARY KEY (account_id, permission_id, realm_id)
@@ -110,9 +113,9 @@ CREATE TABLE rbac_account_permissions (
 COMMENT ON TABLE rbac_account_permissions IS 'Role-based account permissions.';
 
 CREATE TABLE realmcharacters (
-    realmid INT NOT NULL CHECK (realmid >= 0),
-    acctid INT NOT NULL CHECK (acctid >= 0),
-    numchars SMALLINT NOT NULL DEFAULT 0 CHECK (numchars >= 0),
+    realmid uint4 NOT NULL,
+    acctid uint4 NOT NULL,
+    numchars uint1 NOT NULL DEFAULT 0,
     PRIMARY KEY (realmid, acctid)
 );
 
@@ -122,26 +125,26 @@ COMMENT ON TABLE realmcharacters IS 'Tracks the number of characters for each ac
 CREATE TABLE realmlist (
     id SERIAL PRIMARY KEY,
     name VARCHAR(32) NOT NULL UNIQUE,
-    address VARCHAR(255) NOT NULL DEFAULT '127.0.0.1',
-    local_address VARCHAR(255) NOT NULL DEFAULT '127.0.0.1',
-    local_subnet_mask VARCHAR(255) NOT NULL DEFAULT '255.255.255.0',
-    port SMALLINT NOT NULL DEFAULT 8085,
-    icon SMALLINT NOT NULL DEFAULT 0,
-    flag SMALLINT NOT NULL DEFAULT 2,
-    timezone SMALLINT NOT NULL DEFAULT 0,
-    allowed_security_level SMALLINT NOT NULL DEFAULT 0,
+    address INET NOT NULL DEFAULT '127.0.0.1',
+    local_address INET NOT NULL DEFAULT '127.0.0.1',
+    local_subnet_mask INET NOT NULL DEFAULT '255.255.255.0',
+    port uint2 NOT NULL DEFAULT 8085,
+    icon uint1 NOT NULL DEFAULT 0,
+    flag uint1 NOT NULL DEFAULT 2,
+    timezone uint1 NOT NULL DEFAULT 0,
+    allowed_security_level uint1 NOT NULL DEFAULT 0,
     population real NOT NULL DEFAULT 0 CHECK (population >= 0),
-    gamebuild INT NOT NULL DEFAULT 12340
+    gamebuild uint4 NOT NULL DEFAULT 12340
 );
 
 COMMENT ON TABLE realmlist IS 'List of game realms.';
 
 CREATE TABLE uptime (
-    realmid INT NOT NULL CHECK (realmid >= 0),
-    starttime INT NOT NULL DEFAULT 0 CHECK (starttime >= 0),
-    uptime INT NOT NULL DEFAULT 0 CHECK (uptime >= 0),
-    maxplayers SMALLINT NOT NULL DEFAULT 0 CHECK (maxplayers >= 0),
-    revision VARCHAR(255) NOT NULL DEFAULT 'Trinitycore',
+    realmid uint4 NOT NULL,
+    starttime timestamp NOT NULL DEFAULT now (),
+    uptime uint4 NOT NULL DEFAULT 0,
+    maxplayers uint2 NOT NULL DEFAULT 0,
+    revision VARCHAR(255) NOT NULL DEFAULT 'azerust',
     PRIMARY KEY (realmid, starttime)
 );
 

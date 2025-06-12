@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 #![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
@@ -17,29 +18,27 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use azerust_axum::world_api;
 use azerust_game::realms::RealmId;
-use azerust_mysql_auth::{accounts::MySQLAccountService, realms::MySQLRealmList};
-use azerust_mysql_characters::MySQLCharacterService;
+use azerust_pg_auth::{PgAccountService, PgRealmList};
+use azerust_pg_characters::PgCharacterService;
 use azerust_utils::flatten;
+use deadpool_postgres::{Runtime, tokio_postgres::NoTls};
 use human_panic::setup_panic;
-use sqlx::MySqlPool;
 use structopt::StructOpt;
 use tokio::try_join;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
-use tracing_subscriber::{filter, prelude::*, Layer};
+use tracing_subscriber::{Layer, filter, prelude::*};
 
 use crate::{conf::WorldServerConfig, opt::Opt, worldserver::WorldServer};
 
 mod client;
 mod conf;
 mod opt;
-mod protocol;
 mod world;
 mod worldserver;
-mod wow_bincode;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,41 +47,28 @@ async fn main() -> Result<()> {
     let opts: Opt = Opt::from_args();
     let config = WorldServerConfig::read(&opts.config).await?;
 
-    let tracer = opentelemetry_jaeger::new_pipeline()
-        .with_service_name("auth")
-        .install_simple()?;
+    // let tracer = opentelemetry_jaeger::new_pipeline().with_service_name("auth").install_simple()?;
 
     let fmt_filter = std::env::var("RUST_LOG")
         .ok()
         .and_then(|log_filter| match log_filter.parse::<filter::Targets>() {
             Ok(targets) => Some(targets),
             Err(e) => {
-                eprintln!(
-                    "failed to parse filter environment variable `RUST_LOG={:?}`: {}",
-                    log_filter, e
-                );
+                eprintln!("failed to parse filter environment variable `RUST_LOG={:?}`: {}", log_filter, e);
                 None
             }
         })
-        .unwrap_or_else(|| {
-            "error"
-                .parse::<filter::Targets>()
-                .expect("`error` filter should always parse successfully")
-        });
+        .unwrap_or_else(|| "error".parse::<filter::Targets>().expect("`error` filter should always parse successfully"));
 
-    if let Some(port) = config.console_port {
+    if let Some(_port) = config.console_port {
         tracing_subscriber::registry()
-            .with(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr((config.bind_address, port))
-                    .spawn(),
-            )
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            // .with(console_subscriber::ConsoleLayer::builder().server_addr((config.bind_address, port)).spawn())
+            // .with(tracing_opentelemetry::layer().with_tracer(tracer))
             .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
             .init();
     } else {
         tracing_subscriber::registry()
-            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            // .with(tracing_opentelemetry::layer().with_tracer(tracer))
             .with(tracing_subscriber::fmt::layer().with_filter(fmt_filter))
             .init();
     };
@@ -118,27 +104,23 @@ async fn main() -> Result<()> {
 }
 
 async fn start_server(config: WorldServerConfig) -> Result<()> {
-    let auth_pool = MySqlPool::connect(&config.auth_database)
-        .await
-        .context("could not start the database pool")?;
+    let mut pool_cfg = deadpool_postgres::Config::new();
+    pool_cfg.url = Some(config.auth_database.clone());
+    pool_cfg.connect_timeout = Some(Duration::from_secs(3));
+    let auth_pool = pool_cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
 
-    let character_pool = MySqlPool::connect(&config.character_database)
-        .await
-        .context("could not start the database pool")?;
+    let mut pool_cfg = deadpool_postgres::Config::new();
+    pool_cfg.url = Some(config.character_database.clone());
+    pool_cfg.connect_timeout = Some(Duration::from_secs(3));
+    let character_pool = pool_cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
 
     debug!("Loaded config {:?}", config);
 
-    let accounts = MySQLAccountService::new(auth_pool.clone());
-    let realms = MySQLRealmList::new(auth_pool.clone(), Duration::from_secs(60));
-    let characters = MySQLCharacterService::new(character_pool.clone());
+    let accounts = PgAccountService::new(auth_pool.clone());
+    let realms = PgRealmList::new(auth_pool.clone(), Duration::from_secs(60));
+    let characters = PgCharacterService::new(character_pool.clone());
 
-    let server = WorldServer::new(
-        config.realm_id,
-        accounts,
-        realms,
-        characters.clone(),
-        config.auth_server_address,
-    );
+    let server = WorldServer::new(config.realm_id, accounts, realms, characters.clone(), config.auth_server_address);
 
     let cancel = CancellationToken::new();
 
@@ -150,11 +132,7 @@ async fn start_server(config: WorldServerConfig) -> Result<()> {
         let api = flatten(
             tokio::task::Builder::new()
                 .name("auth::graphql")
-                .spawn(async move {
-                    world_api(&addr, characters)
-                        .await
-                        .map_err(|_| anyhow::anyhow!("failed to start graphql api"))
-                })?,
+                .spawn(async move { world_api(&addr, characters).await.map_err(|_| anyhow::anyhow!("failed to start graphql api")) })?,
         );
 
         try_join!(server.start(cancel), api)?;

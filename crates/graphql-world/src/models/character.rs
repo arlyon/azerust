@@ -9,6 +9,6 @@ impl Character {
         &self.0.name
     }
     async fn level(&self) -> u8 {
-        self.0.level
+        self.0.level.as_int()
     }
 }

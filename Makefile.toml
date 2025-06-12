@@ -24,14 +24,14 @@ curl https://raw.githubusercontent.com/TrinityCore/TrinityCore/3.3.5/sql/base/${
 
 [tasks.world]
 command = "cargo"
-args = ["run", "--bin", "azerust-world", "config-world.yaml", "${@}"]
+args = ["run", "-p", "azerust-world", "config-world.yaml", "${@}"]
 
 [tasks.auth]
 command = "cargo"
-args = ["run", "--bin", "azerust-auth", "config-auth.yaml", "${@}"]
+args = ["run", "-p", "azerust-auth", "config-auth.yaml", "${@}"]
 
 [env]
-RUST_LOG = "azerust_world,azerust_auth,azerust_mysql_auth,azerust_mysql_characters,ERROR"
+RUST_LOG = "azerust_world=TRACE,azerust_auth=TRACE,azerust_pg_auth=TRACE,deadpool_postgres=TRACE,tokio-postgres=TRACE,azerust_pg_characters=TRACE,ERROR"
 
 [config]
 default_to_workspace = false

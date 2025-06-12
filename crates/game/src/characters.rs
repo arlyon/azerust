@@ -1,9 +1,7 @@
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use sqlx::Type;
 use thiserror::Error;
+pub use wow_world_messages::wrath::{Area, Class, Gender, Level, Map, Race};
 
-use crate::{accounts::AccountId, EntityType, WowId};
+use crate::{EntityType, Guid, accounts::AccountId, new_guid};
 
 #[derive(Error, Debug, Clone, Copy)]
 pub enum TryFromWowIdError {
@@ -11,32 +9,43 @@ pub enum TryFromWowIdError {
     InvalidEntityType(u16),
 }
 
-#[derive(Debug, Clone, Copy, Type)]
-#[sqlx(transparent)]
-pub struct CharacterId(u64);
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct CharacterId(pub u32);
 
-impl TryFrom<WowId> for CharacterId {
+impl TryFrom<Guid> for CharacterId {
     type Error = TryFromWowIdError;
 
-    fn try_from(value: WowId) -> Result<Self, Self::Error> {
-        let e_type = (value.0 >> 48) as u16;
+    fn try_from(value: Guid) -> Result<Self, Self::Error> {
+        let e_type = (value.guid() >> 48) as u16;
         if e_type == EntityType::Player as u16 {
-            Ok(CharacterId(value.0))
+            Ok(CharacterId(value.guid() as u32))
         } else {
             Err(TryFromWowIdError::InvalidEntityType(e_type))
         }
     }
 }
 
+impl From<CharacterId> for Guid {
+    fn from(id: CharacterId) -> Self {
+        new_guid(EntityType::Player, id.0, 0)
+    }
+}
+
+impl From<&CharacterId> for Guid {
+    fn from(id: &CharacterId) -> Self {
+        (*id).into()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Character {
-    pub id: WowId,
+    pub id: CharacterId,
     pub account: AccountId,
     pub name: String,
-    pub level: u8,
-    pub race: u8,
-    pub class: u8,
-    pub gender: u8,
+    pub level: Level,
+    pub race: Race,
+    pub class: Class,
+    pub gender: Gender,
 
     pub skin_color: u8,
     pub face: u8,
@@ -44,8 +53,8 @@ pub struct Character {
     pub hair_color: u8,
     pub facial_style: u8,
 
-    pub zone: u16,
-    pub map: u16,
+    pub zone: Area,
+    pub map: Map,
     pub position_x: f32,
     pub position_y: f32,
     pub position_z: f32,
@@ -58,9 +67,9 @@ pub struct Character {
 #[derive(Debug, Clone)]
 pub struct CharacterCreate {
     pub name: String,
-    pub race: u8,
-    pub class: u8,
-    pub gender: u8,
+    pub race: Race,
+    pub class: Class,
+    pub gender: Gender,
 
     pub skin_color: u8,
     pub face: u8,
@@ -75,63 +84,31 @@ pub struct CharacterCreate {
     pub position_z: f32,
 }
 
-#[derive(Debug, Default)]
-pub struct DualDataCache {
-    pub global: Option<AccountDataCache>,
-    pub per_char: Option<AccountDataCache>,
-}
-
-#[derive(Debug, Default)]
-pub struct AccountData {
-    pub config: DualDataCache,
-    pub bindings: DualDataCache,
-    pub macros: DualDataCache,
-    pub per_char_layout: Option<AccountDataCache>,
-    pub per_char_chat: Option<AccountDataCache>,
-}
-
-impl AccountData {
-    pub fn items(self) -> [Option<AccountDataCache>; 8] {
-        [
-            self.config.global,
-            self.config.per_char,
-            self.bindings.global,
-            self.bindings.per_char,
-            self.macros.global,
-            self.macros.per_char,
-            self.per_char_layout,
-            self.per_char_chat,
-        ]
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub enum AccountDataType {
-    World,
-    PerChar,
-    Account,
-}
-
 #[derive(Debug, Clone)]
 pub struct AccountDataCache {
     pub time: u32,
     pub data: Vec<u8>,
 }
 
-#[async_trait]
 pub trait CharacterService {
-    async fn get(&self, id: CharacterId) -> Result<Character, CharacterServiceError>;
-    async fn list(&self) -> Result<Vec<Character>, CharacterServiceError>;
-    async fn get_by_account(&self, id: AccountId) -> Result<Vec<Character>, CharacterServiceError>;
-    async fn account_data(&self, id: AccountId) -> Result<AccountData, CharacterServiceError>;
-    async fn count_by_account(&self, id: AccountId) -> Result<usize, CharacterServiceError>;
-    async fn name_available(&self, name: &str) -> Result<bool, CharacterServiceError>;
-    async fn create_character(
+    fn get(&self, id: CharacterId) -> impl Future<Output = Result<Option<Character>, CharacterServiceError>> + Send;
+    fn get_by_name(&self, name: &str) -> impl Future<Output = Result<Option<Character>, CharacterServiceError>> + Send;
+    /// Get list of friends, flags and notes for a given character
+    fn get_friends(&self, id: CharacterId) -> impl Future<Output = Result<Vec<(CharacterId, u32, String)>, CharacterServiceError>> + Send;
+    fn add_friend_by_name(
         &self,
-        account: AccountId,
-        create: CharacterCreate,
-    ) -> Result<(), CharacterServiceError>;
-    async fn delete_character(&self, id: CharacterId) -> Result<(), CharacterServiceError>;
+        id: CharacterId,
+        name: &str,
+        note: Option<&str>,
+    ) -> impl Future<Output = Result<Option<CharacterId>, CharacterServiceError>> + Send;
+    fn list(&self) -> impl Future<Output = Result<Vec<Character>, CharacterServiceError>> + Send;
+    fn get_by_account(&self, id: AccountId) -> impl Future<Output = Result<Vec<Character>, CharacterServiceError>> + Send;
+    fn account_data(&self, id: AccountId) -> impl Future<Output = Result<Vec<(i16, AccountDataCache)>, CharacterServiceError>> + Send;
+    fn character_account_data(&self, id: CharacterId) -> impl Future<Output = Result<Vec<(i16, AccountDataCache)>, CharacterServiceError>> + Send;
+    fn count_by_account(&self, id: AccountId) -> impl Future<Output = Result<usize, CharacterServiceError>> + Send;
+    fn name_available(&self, name: &str) -> impl Future<Output = Result<bool, CharacterServiceError>> + Send;
+    fn create_character(&self, account: AccountId, create: CharacterCreate) -> impl Future<Output = Result<CharacterId, CharacterServiceError>> + Send;
+    fn delete_character(&self, id: CharacterId) -> impl Future<Output = Result<(), CharacterServiceError>> + Send;
 }
 
 /// Errors that may occur when running character operations.

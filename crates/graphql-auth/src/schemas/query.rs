@@ -10,6 +10,12 @@ pub struct Query<A, R> {
     realm: PhantomData<R>,
 }
 
+impl<A, R> Default for Query<A, R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<A, R> Query<A, R> {
     pub fn new() -> Self {
         Self {
@@ -39,6 +45,6 @@ where
 
     async fn get_realms(&self, ctx: &Context<'_>) -> FieldResult<Vec<Realm>> {
         let service = ctx.data::<R>()?;
-        Ok(service.realms().await.into_iter().map(Realm).collect())
+        Ok(service.realms().await?.into_iter().map(Realm).collect())
     }
 }

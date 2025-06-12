@@ -1,27 +1,26 @@
 [package]
 authors = ["Alexander Lyon <arlyon@me.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "azerust-auth"
 version = "0.1.0"
 
 [dependencies]
 async-trait = "0.1"
-sqlx = {version = "0.5", features = ["runtime-tokio-rustls", "mysql", "offline"]}
-tokio = {version = "1", features = ["macros", "tracing"]}
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "tracing"] }
 
 bincode = "2.0.0-dev"
-serde = {version = "1", features = ["derive"]}
-serde_yaml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 
 derivative = "2"
 derive_more = "0.99"
 
 anyhow = "1"
-human-panic = "1"
+human-panic = "2"
 thiserror = "1"
 
-assert-size-attribute = {path = "../../crates/assert-size-attribute"}
+assert-size-attribute = { path = "../../crates/assert-size-attribute" }
 lazy_static = "1"
 num-bigint = "0.4"
 num_enum = "0.5"
@@ -30,24 +29,29 @@ static_assertions = "1"
 structopt = "0.3"
 
 opentelemetry = "0.17.0"
-opentelemetry-jaeger = {version = "0.16.0", features = ["rt-tokio"]}
+opentelemetry-jaeger = { version = "0.16.0", features = ["rt-tokio"] }
 tracing = "0.1"
 tracing-opentelemetry = "0.17"
 tracing-subscriber = "0.3"
 
-azerust-axum = {path = "../../crates/axum"}
-azerust-game = {path = "../../crates/game"}
-azerust-mysql-auth = {path = "../../crates/mysql-auth"}
-azerust-protocol = {path = "../../crates/protocol", features = ["auth"]}
-azerust-utils = {path = "../../crates/utils"}
-chrono = "0.4.19"
-console-subscriber = "0.1.1"
+azerust-axum = { path = "../../crates/axum" }
+azerust-game = { path = "../../crates/game" }
+azerust-pg-auth = { path = "../../crates/pg-auth" }
+azerust-utils = { path = "../../crates/utils" }
+# console-subscriber = "0.1.1"
 enumflags2 = "0.7.0-preview1"
 futures-util = "0.3.19"
-tokio-stream = {version = "0.1.8", features = ["net", "time"]}
-wow-srp = {path = "../../crates/wow-srp"}
+tokio-stream = { version = "0.1.8", features = ["net", "time"] }
+wow-srp = { path = "../../crates/wow-srp" }
 ctrlc-async = "3.2.2"
 tokio-util = "0.7.4"
+wow_login_messages = { version = "0.5.0", features = ["tokio"] }
+deadpool-postgres = "0.12.0"
+tokio-postgres = "0.7.12"
+deadpool = "0.10"
+postgres = "0.19.9"
+postgres-native-tls = "0.5.0"
+# console-subscriber = "0.4.1"
 
 [dev-dependencies]
 test-case = "1"

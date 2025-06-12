@@ -5,10 +5,6 @@ pub use schemas::{Mutation, Query};
 mod models;
 mod schemas;
 
-pub fn create_schema<C: 'static + CharacterService + Send + Sync>(
-    characters: C,
-) -> Schema<Query<C>, Mutation<C>, EmptySubscription> {
-    Schema::build(Query::new(), Mutation::new(), EmptySubscription)
-        .data(characters)
-        .finish()
+pub fn create_schema<C: 'static + CharacterService + Send + Sync>(characters: C) -> Schema<Query<C>, Mutation<C>, EmptySubscription> {
+    Schema::build(Query::new(), Mutation::new(), EmptySubscription).data(characters).finish()
 }

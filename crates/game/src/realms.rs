@@ -3,16 +3,15 @@
 //! The realms module handles everything regarding managing
 //! realm and realmlists.
 
-use std::time::SystemTime;
+use std::net::IpAddr;
 
-use async_trait::async_trait;
 use derive_more::{From, Into};
 use enumflags2::bitflags;
 use num_enum::IntoPrimitive;
 use serde::{Deserialize, Serialize};
-use sqlx::Type;
 use strum_macros::ToString;
 use thiserror::Error;
+use time::OffsetDateTime;
 
 /// The various flags that a realm can have.
 /// They are implemented as BitFlags.
@@ -33,7 +32,7 @@ pub enum RealmFlags {
 /// The various types of realm.
 /// For more, see <https://wow.tools/dbc/?dbc=cfg_configs&build=3.3.5.12340>
 #[repr(u8)]
-#[derive(Clone, Copy, Type, Debug, IntoPrimitive, ToString)]
+#[derive(Clone, Copy, Debug, IntoPrimitive, ToString)]
 pub enum RealmType {
     Normal = 0,
     PVP = 1,
@@ -42,8 +41,7 @@ pub enum RealmType {
 }
 
 /// A marker for a realm id.
-#[derive(Type, Clone, Debug, From, Into, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[sqlx(transparent)]
+#[derive(Clone, Debug, From, Into, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RealmId(pub u32);
 
 /// The basic realm object.
@@ -53,31 +51,35 @@ pub struct Realm {
     pub name: String,
     pub realm_type: RealmType,
     pub build: u32,
-    pub external_address: String,
-    pub local_address: String,
-    pub local_subnet_mask: String,
+    pub external_address: IpAddr,
+    pub local_address: IpAddr,
+    pub local_subnet_mask: IpAddr,
     pub port: u16,
-    pub flags: u8, // BitFlags<RealmFlags>
+    pub flags: u8,
     pub timezone: u8,
     pub population: f32,
 }
 
 /// A trait that models a realmlist.
-#[async_trait]
 pub trait RealmList: Send + Sync {
     /// Return the list of realms sorted by id.
-    async fn realms(&self) -> Vec<Realm>;
+    fn realms(&self) -> impl Future<Output = Result<Vec<Realm>, RealmListError>> + Send;
 
-    async fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> Result<(), RealmListError>;
+    fn update_status(&self, online: Vec<(u8, RealmFlags)>) -> impl Future<Output = Result<(), RealmListError>> + Send;
 
     /// Update the uptime counter for a server that started
     /// at the given `start` time.
-    async fn set_uptime(
+    fn set_uptime(&self, id: RealmId, start: OffsetDateTime, population: u16) -> impl Future<Output = Result<(), RealmListError>> + Send;
+
+    /// Create a new realm in the realmlist.
+    fn create_realm(
         &self,
-        id: RealmId,
-        start: SystemTime,
-        population: u32,
-    ) -> Result<(), RealmListError>;
+        name: &str,
+        address: &IpAddr,
+        local_address: &IpAddr,
+        local_subnet_mask: &IpAddr,
+        port: u16,
+    ) -> impl Future<Output = Result<Realm, RealmListError>> + Send;
 }
 
 /// Errors that may occur when running realmlist operations.

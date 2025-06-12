@@ -1,9 +1,11 @@
 use std::{
+    net::IpAddr,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 
 use azerust_game::realms::{Realm, RealmFlags, RealmId, RealmList, RealmListError, RealmType};
+use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace};
 
@@ -31,15 +33,15 @@ impl PgRealmList {
 
 impl RealmList for PgRealmList {
     #[instrument(skip(self))]
-    async fn realms(&self) -> Vec<Realm> {
+    async fn realms(&self) -> Result<Vec<Realm>, RealmListError> {
         let now = SystemTime::now();
         if now > *self.next_update.read().await {
             debug!("Refreshing realm list");
 
             if let Ok(realms) = realms::refresh_realmlist()
-                .bind(&self.pool.get().await.unwrap())
+                .bind(&self.pool.get().await.map_err(|e| RealmListError::PersistError(e.to_string()))?)
                 .map(|realm| Realm {
-                    id: RealmId(realm.id),
+                    id: RealmId(realm.id as u32),
                     build: realm.build,
                     external_address: realm.external_address.to_owned(),
                     local_address: realm.local_address.to_owned(),
@@ -47,7 +49,7 @@ impl RealmList for PgRealmList {
                     name: realm.name.to_owned(),
                     flags: realm.flags,
                     port: realm.port,
-                    population: realm.population as f32,
+                    population: realm.population,
                     realm_type: match realm.realm_type {
                         0 => RealmType::Normal,
                         1 => RealmType::PVP,
@@ -60,14 +62,14 @@ impl RealmList for PgRealmList {
                 .all()
                 .await
             {
-                let (mut self_realms, mut self_next_update) =
-                    futures::join!(self.realms.write(), self.next_update.write());
+                debug!(realms = realms.len(), "Refreshed realm list");
+                let (mut self_realms, mut self_next_update) = futures::join!(self.realms.write(), self.next_update.write());
                 *self_realms = realms;
                 *self_next_update = now + self.update_interval;
             }
         };
 
-        self.realms.read().await.clone()
+        Ok(self.realms.read().await.clone())
     }
 
     #[instrument(skip(self))]
@@ -75,54 +77,73 @@ impl RealmList for PgRealmList {
         for (id, flag) in online {
             realms::update_realmlist_status()
                 .bind(
-                    &self.pool.get().await.unwrap(),
+                    &self.pool.get().await.map_err(|e| RealmListError::PersistError(e.to_string()))?,
+                    &(flag as u8),
                     &id.into(),
-                    &(flag as u8).into(),
                 )
                 .await
-                .unwrap();
+                .map_err(|e| RealmListError::PersistError(e.to_string()))?;
         }
 
         Ok(())
     }
 
     #[instrument(skip(self))]
-    async fn set_uptime(
-        &self,
-        id: RealmId,
-        start: SystemTime,
-        population: u32,
-    ) -> Result<(), RealmListError> {
-        let start_i32: i32 = start
-            .duration_since(UNIX_EPOCH)
-            .expect("no time can be smaller than UNIX_EPOCH")
-            .as_secs()
-            .try_into()
-            .map_err(|_| RealmListError::StartTimeTooLarge)?;
+    async fn set_uptime(&self, id: RealmId, start: OffsetDateTime, population: u16) -> Result<(), RealmListError> {
+        let utc = start.to_offset(UtcOffset::UTC);
+        let uptime = OffsetDateTime::now_utc() - start;
 
-        let uptime = SystemTime::now()
-            .duration_since(start)
-            .map_err(|_| RealmListError::StartTimeInFuture)?;
-
-        let uptime_i32: i32 = uptime
-            .as_secs()
-            .try_into()
-            .expect("server won't be up for 40 years");
+        let uptime_u32: u32 = uptime.whole_seconds().try_into().expect("server won't be up for 40 years");
 
         trace!("setting uptime for realm {:?} to {:?}", id, uptime);
 
         realms::set_uptime()
             .bind(
-                &self.pool.get().await.unwrap(),
+                &self.pool.get().await.map_err(|e| RealmListError::PersistError(e.to_string()))?,
                 &id.0,
-                &start_i32,
-                &uptime_i32,
-                &(population as i16),
+                &PrimitiveDateTime::new(utc.date(), utc.time()),
+                &uptime_u32,
+                &population,
                 &"azerust-0.1.0",
             )
             .await
             .map_err(|e| RealmListError::PersistError(e.to_string()))?;
 
         Ok(())
+    }
+
+    #[instrument(skip(self))]
+    async fn create_realm(&self, name: &str, address: &IpAddr, local_address: &IpAddr, local_subnet_mask: &IpAddr, port: u16) -> Result<Realm, RealmListError> {
+        realms::create_realm()
+            .bind(
+                &mut self.pool.get().await.map_err(|e| RealmListError::PersistError(e.to_string()))?,
+                &name,
+                address,
+                local_address,
+                local_subnet_mask,
+                &port,
+            )
+            .map(|r| Realm {
+                id: RealmId(r.id as u32),
+                build: r.gamebuild,
+                external_address: r.address,
+                local_address: r.local_address,
+                local_subnet_mask: r.local_subnet_mask,
+                flags: r.flag,
+                timezone: r.timezone,
+                name: r.name.to_owned(),
+                population: r.population,
+                port: r.port,
+                realm_type: match r.icon {
+                    0 => RealmType::Normal,
+                    1 => RealmType::PVP,
+                    6 => RealmType::RP,
+                    8 => RealmType::RPPvP,
+                    _ => panic!(),
+                },
+            })
+            .one()
+            .await
+            .map_err(|e| RealmListError::PersistError(e.to_string()))
     }
 }

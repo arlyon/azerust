@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use async_graphql::{Context, FieldResult, Object};
-use azerust_game::{accounts::AccountService, characters::CharacterService, realms::RealmList};
+use azerust_game::characters::CharacterService;
 
 use crate::models::Character;
 
@@ -9,11 +9,15 @@ pub struct Query<C> {
     character: PhantomData<C>,
 }
 
+impl<C> Default for Query<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<C> Query<C> {
     pub fn new() -> Self {
-        Self {
-            character: PhantomData,
-        }
+        Self { character: PhantomData }
     }
 }
 
